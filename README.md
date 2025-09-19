@@ -15,17 +15,20 @@ A simple, lightweight expense tracking web application built with Node.js and SQ
 
 ## Quick Start
 
-1. **Install dependencies**:
+1. ##Add password.txt
+   add a password.txt file with your desired password to the root directory
+
+2. **Install dependencies**:
    ```bash
    npm install
    ```
 
-2. **Start the server**:
+3. **Start the server**:
    ```bash
    npm start
    ```
 
-3. **Open in browser**:
+4. **Open in browser**:
    Navigate to `http://localhost:3000`
 
 ## Form Fields
