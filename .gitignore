@@ -1,0 +1,5 @@
+**/expenses.db
+node_modules/
+.env
+.vscode/
+password.txt

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Expenses - Expense Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container full-width">        <header class="flex">
+            <h1>📊 All Expenses</h1>            <div class="header-actions">
+                <div id="connection-status" class="connection-status" title="Connection Status">
+                    <span id="connection-indicator">🟢</span>
+                    <span id="connection-text">Connected</span>
+                </div>
+                <button id="import-btn" class="import-btn" title="Import from CSV">📥 Import</button>
+                <button id="sample-btn" class="sample-btn" title="Download Sample CSV">📋 Sample</button>
+                <button id="export-btn" class="export-btn" title="Export to CSV">📄 Export</button>
+                <button onclick="window.location.href='/'" class="close-btn" title="Back to Main">← Back</button>
+            </div>        </header>
+
+        <div class="summary">
+            <div class="summary-item">
+                <span class="summary-label">Total Expenses:</span>
+                <span id="total-expenses" class="summary-value expense">$0.00</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total Income:</span>
+                <span id="total-income" class="summary-value income">$0.00</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Net Balance:</span>
+                <span id="net-balance" class="summary-value">$0.00</span>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <div class="charts-container">
+                <!-- Category Bar Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>📊 Expenses by Category</h3>
+                        <div class="chart-controls">
+                            <select id="bar-chart-range" class="chart-filter">
+                                <option value="all">All Time</option>
+                                <option value="30">Last 30 Days</option>
+                                <option value="90">Last 90 Days</option>
+                                <option value="365">Last Year</option>
+                                <option value="current-month">Current Month</option>
+                                <option value="current-year">Current Year</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="category-bar-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Trend Line Chart -->
+                <div class="chart-card">                <div class="chart-header">
+                    <h3>📈 Expense Trends</h3>
+                    <div class="chart-controls">
+                        <select id="line-chart-category" class="chart-filter">
+                            <option value="all">All Categories</option>
+                            <!-- Categories will be populated dynamically -->
+                        </select>
+                        <select id="line-chart-period" class="chart-filter">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                        <select id="line-chart-range" class="chart-filter">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30" selected>Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                            <option value="365">Last Year</option>
+                            <option value="current-month">Current Month</option>
+                            <option value="current-year">Current Year</option>
+                        </select>
+                    </div>
+                </div>
+                    <div class="chart-container">
+                        <canvas id="trend-line-chart"></canvas>
+                    </div>
+                </div>            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="search">Search:</label>
+                <input type="text" id="search" placeholder="Search expenses...">
+            </div>
+            <div class="filter-group">
+                <label for="category-filter">Category:</label>
+                <select id="category-filter">
+                    <option value="">All Categories</option>
+                    <!-- Expense categories -->
+                    <option value="kitchen / home">Kitchen / Home</option>
+                    <option value="investments">Investments</option>
+                    <option value="office work">Office Work</option>
+                    <option value="subscriptions">Subscriptions</option>
+                    <option value="electronics personal">Electronics Personal</option>
+                    <option value="clothes + accessories">Clothes + Accessories</option>
+                    <option value="travel">Travel</option>
+                    <option value="food">Food</option>
+                    <option value="various/ debt repayment">Various / Debt Repayment</option>
+                    <option value="fun">Fun</option>
+                    <option value="rent+bills">Rent + Bills</option>
+                    <option value="gifts">Gifts</option>
+                    <option value="health">Health</option>
+                    <option value="restaurant">Restaurant</option>
+                    <option value="tzedakah">Tzedakah</option>
+                    <!-- Income categories -->
+                    <option value="work">Work</option>
+                    <option value="sidejob">Sidejob</option>
+                    <option value="gift">Gift</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="type-filter">Type:</label>
+                <select id="type-filter">
+                    <option value="">All Types</option>
+                    <option value="expense">Expenses</option>
+                    <option value="income">Income</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="date-start-filter">From:</label>
+                <input type="date" id="date-start-filter">
+            </div>
+            <div class="filter-group">
+                <label for="date-end-filter">To:</label>
+                <input type="date" id="date-end-filter">
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="expenses-table">                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="expense_date">Date</th>
+                        <th class="sortable" data-sort="amount">Amount</th>
+                        <th class="sortable" data-sort="category">Category</th>                        <th class="sortable" data-sort="what">
+                            What 
+                            <label class="consolidate-header-toggle">
+                                <input type="checkbox" id="consolidate-what-toggle" title="Consolidate by category + what">
+                            </label>
+                        </th>
+                        <th>
+                            Notes 
+                            <label class="consolidate-header-toggle">
+                                <input type="checkbox" id="consolidate-notes-toggle" title="Consolidate by category + notes">
+                            </label>
+                        </th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="expenses-tbody">
+                    <!-- Expenses will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div id="loading" class="loading">Loading expenses...</div>        <div id="no-results" class="no-results" style="display: none;">
+            <p>No expenses match your filters.</p>
+        </div>
+
+        <!-- Hidden file input for CSV import -->
+        <input type="file" id="csv-file-input" accept=".csv" style="display: none;">
+
+        <!-- Import Modal -->
+        <div id="import-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📥 Import Expenses from CSV</h3>
+                    <span class="close" id="close-modal">&times;</span>
+                </div>
+                <div class="modal-body">                    <div class="import-instructions">
+                        <h4>CSV Format Requirements:</h4>
+                        <ul>
+                            <li><strong>Date:</strong> MM/DD/YYYY or YYYY-MM-DD format</li>
+                            <li><strong>Amount:</strong> Positive numbers (all imports treated as expenses)</li>
+                            <li><strong>Category:</strong> Must match existing categories</li>
+                            <li><strong>What:</strong> Description of the expense</li>
+                            <li><strong>Notes:</strong> Optional additional notes</li>
+                            <li><strong>Is Taxable:</strong> true/false (optional field)</li>
+                        </ul>
+                        <p>Need a template? <button id="download-sample" class="sample-link">Download Sample CSV</button></p>
+                    </div>
+                    <div class="file-drop-zone" id="file-drop-zone">
+                        <p>📁 Drop your CSV file here or click to browse</p>
+                        <button type="button" id="browse-file" class="browse-btn">Browse Files</button>
+                    </div>
+                    <div id="import-preview" class="import-preview" style="display: none;">
+                        <h4>Preview (First 5 rows):</h4>
+                        <div id="preview-table"></div>
+                        <div class="import-actions">
+                            <button id="confirm-import" class="confirm-btn">Import <span id="import-count">0</span> Expenses</button>
+                            <button id="cancel-import" class="cancel-btn">Cancel</button>
+                        </div>
+                    </div>
+                    <div id="import-progress" class="import-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div id="progress-fill" class="progress-fill"></div>
+                        </div>
+                        <p id="progress-text">Importing expenses...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="all-expenses.js"></script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <title>Expense Tracker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>    <div class="container">
+        <header>
+            <h1>💰 Expense Tracker</h1>
+            <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
+        </header>
+
+        <main>
+            <form id="expense-form" class="expense-form">
+                <div class="form-group">
+                    <label for="amount">Amount ($)</label>
+                    <input type="number" id="amount" name="amount" step="0.01" min="0" required>
+                </div>                <div class="form-group">
+                    <label for="is-positive">Type</label>
+                    <div class="type-buttons">
+                        <button type="button" id="expense-btn" class="type-btn active">
+                            Expense
+                        </button>
+                        <button type="button" id="income-btn" class="type-btn">
+                            Income
+                        </button>
+                    </div>
+                    <input type="hidden" id="is-positive" name="is_positive" value="0">
+                </div>
+
+                <div class="form-group">
+                    <label for="expense-date">Expense Date</label>
+                    <div class="date-container">
+                        <button type="button" class="date-nav" onclick="changeDate(-1)">‹</button>
+                        <input type="date" id="expense-date" name="expense_date" required>
+                        <button type="button" class="date-nav" onclick="changeDate(1)">›</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="category">Category</label>
+                    <select id="category" name="category" required>
+                        <option value="">Select category...</option>
+                        <option value="kitchen / home">Kitchen / Home</option>
+                        <option value="investments">Investments</option>
+                        <option value="office work">Office Work</option>
+                        <option value="subscriptions">Subscriptions</option>
+                        <option value="electronics personal">Electronics Personal</option>
+                        <option value="clothes + accessories">Clothes + Accessories</option>
+                        <option value="travel">Travel</option>
+                        <option value="food">Food</option>
+                        <option value="various/ debt repayment">Various / Debt Repayment</option>
+                        <option value="fun">Fun</option>
+                        <option value="rent+bills">Rent + Bills</option>
+                        <option value="gifts">Gifts</option>
+                        <option value="health">Health</option>
+                        <option value="restaurant">Restaurant</option>
+                        <option value="tzedakah">Tzedakah</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="what">What</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="what" name="what" required autocomplete="off">
+                        <div id="what-suggestions" class="suggestions"></div>
+                    </div>
+                </div>                <div class="form-group" id="notes-group">
+                    <label for="notes">Notes</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="notes" name="notes" autocomplete="off">
+                        <div id="notes-suggestions" class="suggestions"></div>
+                    </div>
+                </div>
+
+                <div class="form-group" id="taxable-group" style="display: none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="is-taxable" name="is_taxable" value="1">
+                        <span class="checkmark"></span>
+                        Is taxable income
+                    </label>
+                </div>
+
+                <button type="submit" class="submit-btn">Add Expense</button>
+            </form>
+
+            <div id="message" class="message"></div>            <section class="recent-expenses">
+                <h2>Recent Expenses</h2>
+                <div id="expenses-list" class="expenses-list">
+                    <!-- Expenses will be loaded here -->
+                </div>
+                <div class="view-all-container">
+                    <a href="all-expenses.html" class="view-all-btn">View All Expenses</a>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
