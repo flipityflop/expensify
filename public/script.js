@@ -130,7 +130,7 @@ function updateCategoryOptions(isIncome) {
         const expenseCategories = [
             'kitchen / home', 'investments', 'office work', 'subscriptions',
             'electronics personal', 'clothes + accessories', 'travel', 'food',
-            'various/ debt repayment', 'fun', 'rent+bills', 'gifts', 'health',
+            'various/ debt repayment', 'fun', 'rent+bills', 'gifts', 'health', 'beauty',
             'restaurant', 'tzedakah'
         ];
         
