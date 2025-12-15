@@ -5,15 +5,19 @@ const expenseBtn = document.getElementById('expense-btn');
 const incomeBtn = document.getElementById('income-btn');
 const isPositiveInput = document.getElementById('is-positive');
 const dateInput = document.getElementById('expense-date');
+const holdDateCheckbox = document.getElementById('hold-date');
 const categorySelect = document.getElementById('category');
 const whatInput = document.getElementById('what');
 const notesInput = document.getElementById('notes');
+const eventInput = document.getElementById('event');
 const messageDiv = document.getElementById('message');
 const expensesList = document.getElementById('expenses-list');
 
 // Autocomplete elements
 const whatSuggestions = document.getElementById('what-suggestions');
 const notesSuggestions = document.getElementById('notes-suggestions');
+const notesChips = document.getElementById('notes-chips');
+const eventSuggestions = document.getElementById('event-suggestions');
 
 // Authentication helpers
 function getAuthToken() {
@@ -69,30 +73,42 @@ function setupEventListeners() {
     
     // Autocomplete for "what" field
     whatInput.addEventListener('input', () => handleAutocomplete(whatInput, whatSuggestions, 'what'));
-    whatInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(whatSuggestions), 200));
+    whatInput.addEventListener('blur', () => {
+        setTimeout(() => hideSuggestions(whatSuggestions), 200);
+        // Fetch notes suggestions when user leaves "what" field
+        fetchNotesSuggestions(whatInput.value.trim());
+    });
+    // Also fetch suggestions when user selects from autocomplete
+    whatInput.addEventListener('change', () => fetchNotesSuggestions(whatInput.value.trim()));
     
     // Autocomplete for "notes" field
     notesInput.addEventListener('input', () => handleAutocomplete(notesInput, notesSuggestions, 'notes'));
     notesInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(notesSuggestions), 200));
-    
+
+    // Autocomplete for "event" field (same as "what" field)
+    eventInput.addEventListener('input', () => handleAutocomplete(eventInput, eventSuggestions, 'event'));
+    eventInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(eventSuggestions), 200));
+
     // Focus amount input on page load
     amountInput.focus();
 }
 
 function setExpenseType(isIncome) {
     const notesGroup = document.getElementById('notes-group');
+    const eventGroup = document.getElementById('event-group');
     const taxableGroup = document.getElementById('taxable-group');
-    
+
     if (isIncome) {
         // Set to income
         isPositiveInput.value = '1';
         incomeBtn.classList.add('active');
         expenseBtn.classList.remove('active');
-        
-        // Hide notes section, show taxable checkbox
+
+        // Hide notes and event sections, show taxable checkbox
         notesGroup.style.display = 'none';
+        eventGroup.style.display = 'none';
         taxableGroup.style.display = 'block';
-        
+
         // Update category options for income
         updateCategoryOptions(true);
     } else {
@@ -100,11 +116,12 @@ function setExpenseType(isIncome) {
         isPositiveInput.value = '0';
         expenseBtn.classList.add('active');
         incomeBtn.classList.remove('active');
-        
-        // Show notes section, hide taxable checkbox
+
+        // Show notes and event sections, hide taxable checkbox
         notesGroup.style.display = 'block';
+        eventGroup.style.display = 'block';
         taxableGroup.style.display = 'none';
-        
+
         // Update category options for expenses
         updateCategoryOptions(false);
     }
@@ -159,6 +176,7 @@ async function handleFormSubmit(e) {
         category: formData.get('category'),
         what: formData.get('what').trim(),
         notes: formData.get('notes') ? formData.get('notes').trim() : '',
+        event: formData.get('event') ? formData.get('event').trim() : '',
         is_taxable: formData.get('is_taxable') === '1'
     };
     
@@ -173,16 +191,31 @@ async function handleFormSubmit(e) {
         
         const result = await response.json();        if (response.ok) {
             showMessage('Expense added successfully!', 'success');
+
+            // Save date and hold state before reset
+            const currentDate = dateInput.value;
+            const holdDate = holdDateCheckbox.checked;
+
             form.reset();
-            
-            // Reset to default values
-            const today = new Date().toISOString().split('T')[0];
-            dateInput.value = today;
+
+            // Restore hold checkbox state
+            holdDateCheckbox.checked = holdDate;
+
+            // Reset date based on hold checkbox
+            if (holdDate) {
+                dateInput.value = currentDate;
+            } else {
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+            }
             setExpenseType(false); // Reset to expense
             
             // Reset taxable checkbox
             document.getElementById('is-taxable').checked = false;
-            
+
+            // Clear notes suggestion chips
+            notesChips.innerHTML = '';
+
             // Reload expenses
             loadExpenses();
             
@@ -223,26 +256,77 @@ async function handleAutocomplete(input, suggestionsDiv, field) {
 
 function showSuggestions(suggestionsDiv, suggestions, input) {
     suggestionsDiv.innerHTML = '';
-    
+
     suggestions.slice(0, 5).forEach((suggestion, index) => {
         const item = document.createElement('div');
         item.className = 'suggestion-item';
         item.textContent = suggestion;
-        
+
         item.addEventListener('click', () => {
             input.value = suggestion;
             hideSuggestions(suggestionsDiv);
+            // If this is the "what" field, fetch notes suggestions
+            if (input === whatInput) {
+                fetchNotesSuggestions(suggestion);
+            }
             input.focus();
         });
-        
+
         suggestionsDiv.appendChild(item);
     });
-    
+
     suggestionsDiv.style.display = 'block';
 }
 
 function hideSuggestions(suggestionsDiv) {
     suggestionsDiv.style.display = 'none';
+}
+
+// Fetch and display notes suggestions as chips based on "what" field
+async function fetchNotesSuggestions(whatValue) {
+    console.log('fetchNotesSuggestions called with:', whatValue);
+    if (!whatValue) {
+        notesChips.innerHTML = '';
+        return;
+    }
+
+    try {
+        const url = `/api/suggestions/notes-by-what?what=${encodeURIComponent(whatValue)}`;
+        console.log('Fetching:', url);
+        const response = await fetch(url, {
+            headers: getAuthHeaders()
+        });
+        console.log('Response status:', response.status);
+        const suggestions = await response.json();
+        console.log('Suggestions received:', suggestions);
+
+        if (suggestions.length > 0) {
+            displayNotesChips(suggestions);
+        } else {
+            notesChips.innerHTML = '';
+        }
+    } catch (error) {
+        console.error('Notes suggestions error:', error);
+        notesChips.innerHTML = '';
+    }
+}
+
+function displayNotesChips(suggestions) {
+    notesChips.innerHTML = '';
+
+    suggestions.forEach(suggestion => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'suggestion-chip';
+        chip.textContent = suggestion;
+
+        chip.addEventListener('click', () => {
+            notesInput.value = suggestion;
+            notesInput.focus();
+        });
+
+        notesChips.appendChild(chip);
+    });
 }
 
 async function loadExpenses() {

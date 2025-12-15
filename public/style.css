@@ -271,6 +271,39 @@ header.flex h1 {
     display: none !important;
 }
 
+/* Label with inline checkbox */
+.label-with-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.label-with-checkbox > label:first-child {
+    margin-bottom: 0;
+}
+
+.hold-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #a8b3cf;
+}
+
+.hold-checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #67e8f9;
+}
+
+.hold-checkbox-label span {
+    font-weight: 500;
+}
+
 /* Date container */
 .date-container {
     display: flex;
@@ -329,6 +362,31 @@ header.flex h1 {
 
 .suggestion-item:last-child {
     border-bottom: none;
+}
+
+/* Suggestion chips for notes field */
+.suggestion-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.suggestion-chip {
+    background: #374151;
+    color: #e6e8eb;
+    border: 1px solid #4b5563;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.suggestion-chip:hover {
+    background: #4b5563;
+    border-color: #67e8f9;
+    color: #67e8f9;
 }
 
 /* Checkbox styles */

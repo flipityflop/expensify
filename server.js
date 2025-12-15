@@ -53,9 +53,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS expenses (
     category TEXT NOT NULL,
     what TEXT NOT NULL,
     notes TEXT,
+    event TEXT,
     is_taxable INTEGER DEFAULT 0,
     submission_date TEXT DEFAULT CURRENT_TIMESTAMP
 )`);
+
+// Add event column if it doesn't exist (for existing databases)
+try {
+    db.exec(`ALTER TABLE expenses ADD COLUMN event TEXT`);
+} catch (e) {
+    // Column already exists, ignore error
+}
 
 // API Routes
 
@@ -88,16 +96,18 @@ app.get('/api/expenses', requireAuth, (req, res) => {
 
 // Add new expense (protected)
 app.post('/api/expenses', requireAuth, (req, res) => {
-    const { amount, is_positive, expense_date, category, what, notes, is_taxable } = req.body;
-    
+    const { amount, is_positive, expense_date, category, what, notes, event, is_taxable } = req.body;
+
     if (!amount || !expense_date || !category || !what) {
         res.status(400).json({ error: 'Missing required fields' });
         return;
-    }    const finalAmount = is_positive ? Math.abs(amount) : -Math.abs(amount);
+    }
+    const finalAmount = is_positive ? Math.abs(amount) : -Math.abs(amount);
     const currentTimestamp = new Date().toISOString();
-      try {
-        const stmt = db.prepare('INSERT INTO expenses (amount, is_positive, expense_date, category, what, notes, is_taxable, submission_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        const info = stmt.run(finalAmount, is_positive ? 1 : 0, expense_date, category, what, notes || '', is_taxable ? 1 : 0, currentTimestamp);
+
+    try {
+        const stmt = db.prepare('INSERT INTO expenses (amount, is_positive, expense_date, category, what, notes, event, is_taxable, submission_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        const info = stmt.run(finalAmount, is_positive ? 1 : 0, expense_date, category, what, notes || '', event || '', is_taxable ? 1 : 0, currentTimestamp);
         res.json({ id: info.lastInsertRowid, message: 'Expense added successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -108,7 +118,14 @@ app.post('/api/expenses', requireAuth, (req, res) => {
 app.get('/api/autocomplete/what', requireAuth, (req, res) => {
     const query = req.query.q || '';
     try {
-        const rows = db.prepare('SELECT DISTINCT what FROM expenses WHERE what LIKE ? ORDER BY what').all(`%${query}%`);
+        const rows = db.prepare(`
+            SELECT what, COUNT(*) as count
+            FROM expenses
+            WHERE what LIKE ?
+            GROUP BY what
+            ORDER BY count DESC
+            LIMIT 10
+        `).all(`%${query}%`);
         res.json(rows.map(row => row.what));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -119,7 +136,54 @@ app.get('/api/autocomplete/what', requireAuth, (req, res) => {
 app.get('/api/autocomplete/notes', requireAuth, (req, res) => {
     const query = req.query.q || '';
     try {
-        const rows = db.prepare("SELECT DISTINCT notes FROM expenses WHERE notes LIKE ? AND notes != '' ORDER BY notes").all(`%${query}%`);
+        const rows = db.prepare(`
+            SELECT notes, COUNT(*) as count
+            FROM expenses
+            WHERE notes LIKE ? AND notes != ''
+            GROUP BY notes
+            ORDER BY count DESC
+            LIMIT 10
+        `).all(`%${query}%`);
+        res.json(rows.map(row => row.notes));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get autocomplete suggestions for "event" field (protected)
+app.get('/api/autocomplete/event', requireAuth, (req, res) => {
+    const query = req.query.q || '';
+    try {
+        const rows = db.prepare(`
+            SELECT event, COUNT(*) as count
+            FROM expenses
+            WHERE event LIKE ? AND event != ''
+            GROUP BY event
+            ORDER BY count DESC
+            LIMIT 10
+        `).all(`%${query}%`);
+        res.json(rows.map(row => row.event));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get suggested notes based on "what" field (protected)
+app.get('/api/suggestions/notes-by-what', requireAuth, (req, res) => {
+    const what = req.query.what || '';
+    if (!what) {
+        return res.json([]);
+    }
+    try {
+        // Get most common notes for this "what" value, ordered by frequency
+        const rows = db.prepare(`
+            SELECT notes, COUNT(*) as count
+            FROM expenses
+            WHERE LOWER(what) = LOWER(?) AND notes != ''
+            GROUP BY notes
+            ORDER BY count DESC
+            LIMIT 5
+        `).all(what);
         res.json(rows.map(row => row.notes));
     } catch (err) {
         res.status(500).json({ error: err.message });

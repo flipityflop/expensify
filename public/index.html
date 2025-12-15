@@ -30,7 +30,13 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="expense-date">Expense Date</label>
+                    <div class="label-with-checkbox">
+                        <label for="expense-date">Expense Date</label>
+                        <label class="hold-checkbox-label">
+                            <input type="checkbox" id="hold-date" name="hold_date">
+                            <span>Hold</span>
+                        </label>
+                    </div>
                     <div class="date-container">
                         <button type="button" class="date-nav" onclick="changeDate(-1)">‹</button>
                         <input type="date" id="expense-date" name="expense_date" required>
@@ -72,6 +78,15 @@
                     <div class="autocomplete-container">
                         <input type="text" id="notes" name="notes" autocomplete="off">
                         <div id="notes-suggestions" class="suggestions"></div>
+                    </div>
+                    <div id="notes-chips" class="suggestion-chips"></div>
+                </div>
+
+                <div class="form-group" id="event-group">
+                    <label for="event">Event</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="event" name="event" autocomplete="off">
+                        <div id="event-suggestions" class="suggestions"></div>
                     </div>
                 </div>
 
