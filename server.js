@@ -1,220 +1,181 @@
+require('dotenv').config();
 const express = require('express');
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Read password from password.txt file
-const passwordPath = path.join(__dirname, 'password.txt');
-let APP_PASSWORD;
-try {
-    APP_PASSWORD = fs.readFileSync(passwordPath, 'utf8').trim();
-    console.log('Password loaded from password.txt');
-} catch (error) {
-    console.error('Error reading password.txt:', error.message);
-    console.error('Please ensure password.txt exists in the project root directory');
+const APP_PASSWORD = process.env.APP_PASSWORD;
+const TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL;
+const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN;
+
+if (!APP_PASSWORD || !TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN) {
+    console.error('Missing required environment variables: APP_PASSWORD, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN');
+    console.error('Copy .env.example to .env and fill in the values.');
     process.exit(1);
 }
 
-// Middleware
+const db = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN });
+
+// Runs once on cold start; every handler awaits this before touching the DB
+const initPromise = (async () => {
+    await db.execute(`CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        amount REAL NOT NULL,
+        is_positive INTEGER DEFAULT 0,
+        expense_date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        what TEXT NOT NULL,
+        notes TEXT,
+        event TEXT,
+        is_taxable INTEGER DEFAULT 0,
+        submission_date TEXT DEFAULT CURRENT_TIMESTAMP,
+        version INTEGER DEFAULT 1
+    )`);
+    try { await db.execute('ALTER TABLE expenses ADD COLUMN event TEXT'); } catch (_) {}
+    try { await db.execute('ALTER TABLE expenses ADD COLUMN version INTEGER DEFAULT 1'); } catch (_) {}
+})();
+
+// Convert libsql Row objects to plain JS objects for JSON serialization
+function toRows(result) {
+    return result.rows.map(row =>
+        Object.fromEntries(result.columns.map((col, i) => [col, row[i]]))
+    );
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Simple authentication middleware
 function requireAuth(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (authHeader === `Bearer ${APP_PASSWORD}`) {
+    if (req.headers.authorization === `Bearer ${APP_PASSWORD}`) {
         next();
     } else {
         res.status(401).json({ error: 'Unauthorized' });
     }
 }
 
-// Ensure database directory exists
-const dbDir = path.join(__dirname, 'database');
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-}
-
-// Database setup
-const dbPath = path.join(dbDir, 'expenses.db');
-const db = new Database(dbPath);
-
-// Initialize database
-db.exec(`CREATE TABLE IF NOT EXISTS expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    amount REAL NOT NULL,
-    is_positive INTEGER DEFAULT 0,
-    expense_date TEXT NOT NULL,
-    category TEXT NOT NULL,
-    what TEXT NOT NULL,
-    notes TEXT,
-    event TEXT,
-    is_taxable INTEGER DEFAULT 0,
-    submission_date TEXT DEFAULT CURRENT_TIMESTAMP
-)`);
-
-// Add event column if it doesn't exist (for existing databases)
-try {
-    db.exec(`ALTER TABLE expenses ADD COLUMN event TEXT`);
-} catch (e) {
-    // Column already exists, ignore error
-}
-
-// API Routes
-
-// Login endpoint
+// Login
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
-    
     if (password === APP_PASSWORD) {
-        res.json({ 
-            success: true, 
-            token: APP_PASSWORD // In production, use a proper JWT token
-        });
+        res.json({ success: true, token: APP_PASSWORD });
     } else {
-        res.status(401).json({ 
-            success: false, 
-            error: 'Invalid password' 
-        });
+        res.status(401).json({ success: false, error: 'Invalid password' });
     }
 });
 
-// Get all expenses (protected)
-app.get('/api/expenses', requireAuth, (req, res) => {
+// Get all expenses
+app.get('/api/expenses', requireAuth, async (req, res) => {
+    await initPromise;
     try {
-        const rows = db.prepare('SELECT * FROM expenses ORDER BY id DESC').all();
-        res.json(rows);
+        const result = await db.execute('SELECT * FROM expenses ORDER BY id DESC');
+        res.json(toRows(result));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Add new expense (protected)
-app.post('/api/expenses', requireAuth, (req, res) => {
+// Add expense
+app.post('/api/expenses', requireAuth, async (req, res) => {
+    await initPromise;
     const { amount, is_positive, expense_date, category, what, notes, event, is_taxable } = req.body;
-
     if (!amount || !expense_date || !category || !what) {
-        res.status(400).json({ error: 'Missing required fields' });
-        return;
+        return res.status(400).json({ error: 'Missing required fields' });
     }
     const finalAmount = is_positive ? Math.abs(amount) : -Math.abs(amount);
     const currentTimestamp = new Date().toISOString();
-
     try {
-        const stmt = db.prepare('INSERT INTO expenses (amount, is_positive, expense_date, category, what, notes, event, is_taxable, submission_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        const info = stmt.run(finalAmount, is_positive ? 1 : 0, expense_date, category, what, notes || '', event || '', is_taxable ? 1 : 0, currentTimestamp);
-        res.json({ id: info.lastInsertRowid, message: 'Expense added successfully' });
+        const result = await db.execute({
+            sql: 'INSERT INTO expenses (amount, is_positive, expense_date, category, what, notes, event, is_taxable, submission_date, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [finalAmount, is_positive ? 1 : 0, expense_date, category, what, notes || '', event || '', is_taxable ? 1 : 0, currentTimestamp, 2]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Expense added successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Get autocomplete suggestions for "what" field (protected)
-app.get('/api/autocomplete/what', requireAuth, (req, res) => {
+// Autocomplete: what
+app.get('/api/autocomplete/what', requireAuth, async (req, res) => {
+    await initPromise;
     const query = req.query.q || '';
     try {
-        const rows = db.prepare(`
-            SELECT what, COUNT(*) as count
-            FROM expenses
-            WHERE what LIKE ?
-            GROUP BY what
-            ORDER BY count DESC
-            LIMIT 10
-        `).all(`%${query}%`);
-        res.json(rows.map(row => row.what));
+        const result = await db.execute({
+            sql: 'SELECT what, COUNT(*) as count FROM expenses WHERE what LIKE ? GROUP BY what ORDER BY count DESC LIMIT 10',
+            args: [`%${query}%`]
+        });
+        res.json(toRows(result).map(r => r.what));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Get autocomplete suggestions for "notes" field (protected)
-app.get('/api/autocomplete/notes', requireAuth, (req, res) => {
+// Autocomplete: notes
+app.get('/api/autocomplete/notes', requireAuth, async (req, res) => {
+    await initPromise;
     const query = req.query.q || '';
     try {
-        const rows = db.prepare(`
-            SELECT notes, COUNT(*) as count
-            FROM expenses
-            WHERE notes LIKE ? AND notes != ''
-            GROUP BY notes
-            ORDER BY count DESC
-            LIMIT 10
-        `).all(`%${query}%`);
-        res.json(rows.map(row => row.notes));
+        const result = await db.execute({
+            sql: "SELECT notes, COUNT(*) as count FROM expenses WHERE notes LIKE ? AND notes != '' GROUP BY notes ORDER BY count DESC LIMIT 10",
+            args: [`%${query}%`]
+        });
+        res.json(toRows(result).map(r => r.notes));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Get autocomplete suggestions for "event" field (protected)
-app.get('/api/autocomplete/event', requireAuth, (req, res) => {
+// Autocomplete: event
+app.get('/api/autocomplete/event', requireAuth, async (req, res) => {
+    await initPromise;
     const query = req.query.q || '';
     try {
-        const rows = db.prepare(`
-            SELECT event, COUNT(*) as count
-            FROM expenses
-            WHERE event LIKE ? AND event != ''
-            GROUP BY event
-            ORDER BY count DESC
-            LIMIT 10
-        `).all(`%${query}%`);
-        res.json(rows.map(row => row.event));
+        const result = await db.execute({
+            sql: "SELECT event, COUNT(*) as count FROM expenses WHERE event LIKE ? AND event != '' GROUP BY event ORDER BY count DESC LIMIT 10",
+            args: [`%${query}%`]
+        });
+        res.json(toRows(result).map(r => r.event));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Get suggested notes based on "what" field (protected)
-app.get('/api/suggestions/notes-by-what', requireAuth, (req, res) => {
+// Suggestions: notes by what
+app.get('/api/suggestions/notes-by-what', requireAuth, async (req, res) => {
+    await initPromise;
     const what = req.query.what || '';
-    if (!what) {
-        return res.json([]);
-    }
+    if (!what) return res.json([]);
     try {
-        // Get most common notes for this "what" value, ordered by frequency
-        const rows = db.prepare(`
-            SELECT notes, COUNT(*) as count
-            FROM expenses
-            WHERE LOWER(what) = LOWER(?) AND notes != ''
-            GROUP BY notes
-            ORDER BY count DESC
-            LIMIT 5
-        `).all(what);
-        res.json(rows.map(row => row.notes));
+        const result = await db.execute({
+            sql: "SELECT notes, COUNT(*) as count FROM expenses WHERE LOWER(what) = LOWER(?) AND notes != '' GROUP BY notes ORDER BY count DESC LIMIT 5",
+            args: [what]
+        });
+        res.json(toRows(result).map(r => r.notes));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Delete expense (protected)
-app.delete('/api/expenses/:id', requireAuth, (req, res) => {
-    const id = req.params.id;
+// Delete expense
+app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
+    await initPromise;
     try {
-        const stmt = db.prepare('DELETE FROM expenses WHERE id = ?');
-        stmt.run(id);
+        await db.execute({ sql: 'DELETE FROM expenses WHERE id = ?', args: [req.params.id] });
         res.json({ message: 'Expense deleted successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Serve the main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+}
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-    db.close();
-    console.log('Database connection closed.');
-    process.exit(0);
-});
+module.exports = app;

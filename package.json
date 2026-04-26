@@ -2,7 +2,7 @@
   "name": "expensify-site",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
@@ -13,8 +13,12 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "@libsql/client": "^0.14.0",
     "cors": "^2.8.5",
     "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.4.5"
   }
 }
