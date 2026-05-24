@@ -47,7 +47,7 @@ function toRows(result) {
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 function requireAuth(req, res, next) {
     if (req.headers.authorization === `Bearer ${APP_PASSWORD}`) {
