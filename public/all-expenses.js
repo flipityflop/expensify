@@ -130,7 +130,8 @@ async function loadAllExpenses() {
 
         allExpenses = await response.json();
         filteredExpenses = [...allExpenses];
-          updateSummary();
+        updateSummary();
+        updateTzedakah();
         sortData();
         renderTable();
         
@@ -281,7 +282,7 @@ function renderTable() {
 function updateSummary() {
     let totalExpenses = 0;
     let totalIncome = 0;
-    
+
     filteredExpenses.forEach(expense => {
         if (expense.is_positive) {
             totalIncome += Math.abs(expense.amount);
@@ -289,15 +290,37 @@ function updateSummary() {
             totalExpenses += Math.abs(expense.amount);
         }
     });
-    
+
     const netBalance = totalIncome - totalExpenses;
-    
+
     totalExpensesSpan.textContent = `$${totalExpenses.toFixed(2)}`;
     totalIncomeSpan.textContent = `$${totalIncome.toFixed(2)}`;
     netBalanceSpan.textContent = `$${Math.abs(netBalance).toFixed(2)}`;
-    
+
     // Update net balance color
     netBalanceSpan.className = 'summary-value ' + (netBalance >= 0 ? 'positive' : 'negative');
+}
+
+// Always uses allExpenses (not filteredExpenses) so the running tracker
+// doesn't shift when the user filters the table.
+function updateTzedakah() {
+    const v2Income = allExpenses
+        .filter(e => e.is_positive === 1 && e.version === 2)
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    const v2Tzedakah = allExpenses
+        .filter(e => e.is_positive === 0 && e.category === 'tzedakah' && e.version === 2)
+        .reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+    const owed = v2Income * 0.10;
+    const balance = owed - v2Tzedakah;
+
+    const balanceEl = document.getElementById('tzedakah-balance');
+    balanceEl.textContent = `$${balance.toFixed(2)}`;
+    balanceEl.classList.toggle('over-given', balance < 0);
+
+    document.getElementById('tzedakah-income').textContent = `$${v2Income.toFixed(2)}`;
+    document.getElementById('tzedakah-given').textContent = `$${v2Tzedakah.toFixed(2)}`;
 }
 
 async function deleteExpense(id) {

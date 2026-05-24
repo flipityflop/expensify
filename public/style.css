@@ -701,6 +701,77 @@ header.flex h1 {
     color: #ef4444;
 }
 
+/* Tzedakah Tracker */
+.tzedakah-card {
+    background: linear-gradient(135deg, #1e1a3a, #1a1f2e);
+    border: 1px solid #4c4180;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+}
+
+.tzedakah-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.tzedakah-header h3 {
+    margin: 0;
+    color: #e6e8eb;
+    font-size: 1.1rem;
+}
+
+.tzedakah-balance-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.tzedakah-balance-label {
+    font-size: 0.9rem;
+    color: #a8b3cf;
+}
+
+.tzedakah-balance {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #f59e0b;
+}
+
+.tzedakah-balance.over-given {
+    color: #10b981;
+}
+
+.tzedakah-breakdown {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding-top: 14px;
+    border-top: 1px solid #2a3441;
+}
+
+.tzedakah-item {
+    flex: 1;
+    min-width: 120px;
+}
+
+.tzedakah-item-label {
+    display: block;
+    font-size: 0.85rem;
+    color: #a8b3cf;
+    margin-bottom: 4px;
+}
+
+.tzedakah-item-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e6e8eb;
+}
+
 /* Table */
 .table-container {
     background: #1a1f2e;
