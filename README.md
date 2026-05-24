@@ -1,130 +1,97 @@
-# 💰 Expense Tracker
+# Expense Tracker
 
-A simple, lightweight expense tracking web application built with Node.js and SQLite. Designed for mobile-first usage with a clean, fast interface.
+Personal expense + income tracker. Hosted on Vercel with a Turso (libSQL) database.
 
-## Features
+## Tech Stack
 
-- ✅ **Quick Expense Entry**: Simple form with all essential fields
-- ✅ **Income/Expense Toggle**: Easy switch between expenses and income
-- ✅ **Smart Date Picker**: Default to today with navigation arrows
-- ✅ **Category Selection**: Predefined categories for consistent tracking
-- ✅ **Autocomplete**: Smart suggestions based on previous entries
-- ✅ **Mobile Optimized**: Fast, responsive design for mobile devices
-- ✅ **Real-time Updates**: Instant feedback and updates
-- ✅ **Data Persistence**: SQLite database for reliable storage
+- **Hosting**: Vercel (serverless Node.js function)
+- **Database**: Turso (hosted SQLite via `@libsql/client`)
+- **Backend**: Express.js
+- **Frontend**: Vanilla HTML/CSS/JS + Chart.js (CDN)
+- **Auth**: Single password via `APP_PASSWORD` env var, stored as Bearer token in `localStorage`
 
-## Quick Start
+## Environment Variables
 
-1. ##Add password.txt
-   add a password.txt file with your desired password to the root directory
+Required in both `.env` (local) and Vercel dashboard (production):
 
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+| Var | Purpose |
+|-----|---------|
+| `TURSO_DATABASE_URL` | Turso database URL (use `https://` prefix, not `libsql://`, for serverless) |
+| `TURSO_AUTH_TOKEN` | Turso auth token (generate via Turso dashboard) |
+| `APP_PASSWORD` | Password to log into the app |
 
-3. **Start the server**:
-   ```bash
-   npm start
-   ```
+See `.env.example` for the template.
 
-4. **Open in browser**:
-   Navigate to `http://localhost:3000`
+## Local Development
 
-## Form Fields
+```
+npm install
+npm start
+```
 
-1. **Amount** - Dollar amount (positive number)
-2. **Type Toggle** - Switch between Expense (default) and Income
-3. **Expense Date** - Date picker with navigation arrows (defaults to today)
-4. **Category** - Dropdown with predefined categories:
-   - Kitchen / Home
-   - Investments
-   - Office Work
-   - Subscriptions
-   - Electronics Personal
-   - Clothes + Accessories
-   - Travel
-   - Food
-   - Various / Debt Repayment
-   - Fun
-   - Rent + Bills
-   - Gifts
-   - Health
-   - Restaurant
-   - Tzedakah
-5. **What** - Description with autocomplete from previous entries
-6. **Notes** - Optional details with autocomplete
+Then open `http://localhost:3000`. Uses the same Turso database as production by default — there is no separate local database.
 
-## Database
-
-The application uses SQLite with the following schema:
+## Database Schema
 
 ```sql
-expenses (
+CREATE TABLE expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount REAL NOT NULL,
-    is_positive INTEGER DEFAULT 0,      -- 0 for expense, 1 for income
-    expense_date TEXT NOT NULL,         -- Date of the expense
-    category TEXT NOT NULL,             -- Selected category
-    what TEXT NOT NULL,                 -- Description
-    notes TEXT,                         -- Optional notes
-    submission_date TEXT DEFAULT CURRENT_TIMESTAMP  -- When record was created
-)
+    is_positive INTEGER DEFAULT 0,             -- 0 = expense, 1 = income
+    expense_date TEXT NOT NULL,                -- YYYY-MM-DD
+    category TEXT NOT NULL,
+    what TEXT NOT NULL,                        -- short description
+    notes TEXT,                                -- optional
+    event TEXT,                                -- optional tag (e.g. trip name)
+    is_taxable INTEGER DEFAULT 0,              -- only meaningful for income
+    submission_date TEXT DEFAULT CURRENT_TIMESTAMP,
+    version INTEGER DEFAULT 1                  -- 1 = pre-Vercel migration, 2 = after
+);
 ```
+
+The schema is created on cold start via `CREATE TABLE IF NOT EXISTS` in `server.js`.
 
 ## API Endpoints
 
-- `GET /api/expenses` - Retrieve all expenses
-- `POST /api/expenses` - Add new expense
-- `DELETE /api/expenses/:id` - Delete expense
-- `GET /api/autocomplete/what?q=query` - Get suggestions for "what" field
-- `GET /api/autocomplete/notes?q=query` - Get suggestions for "notes" field
+All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 
-## Technology Stack
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/login` | Validates password, returns it as token |
+| `GET` | `/api/expenses` | All expenses, newest first |
+| `POST` | `/api/expenses` | Add an expense (always written with `version = 2`) |
+| `DELETE` | `/api/expenses/:id` | Delete by id |
+| `GET` | `/api/autocomplete/what?q=` | Suggest descriptions |
+| `GET` | `/api/autocomplete/notes?q=` | Suggest notes |
+| `GET` | `/api/autocomplete/event?q=` | Suggest events |
+| `GET` | `/api/suggestions/notes-by-what?what=` | Most-common notes for a given "what" |
 
-- **Backend**: Node.js + Express
-- **Database**: SQLite3
-- **Frontend**: Vanilla HTML, CSS, JavaScript
-- **Styling**: Mobile-first responsive CSS
-- **Dependencies**: Minimal (express, sqlite3, cors)
+## Categories
+
+**Expense**: kitchen / home, investments, office work, subscriptions, electronics personal, clothes + accessories, travel, food, various/ debt repayment, fun, rent+bills, gifts, health, beauty, restaurant, tzedakah
+
+**Income**: work, sidejob, gift, investment, other
+
+(Note: income uses `investment` singular, expense uses `investments` plural — intentional, they're different concepts.)
 
 ## Project Structure
 
 ```
-expense-tracker/
-├── server.js              # Main Express server
-├── package.json           # Node.js dependencies
-├── database/              # SQLite database files (auto-created)
-└── public/               # Static frontend files
-    ├── index.html        # Main HTML page
-    ├── styles.css        # Mobile-optimized CSS
-    └── script.js         # Frontend JavaScript
+expensify-site/
+├── server.js              # Express app + libsql client
+├── vercel.json            # Vercel routing (everything → server.js)
+├── package.json
+├── .env.example
+└── public/                # Served by Express static middleware
+    ├── index.html         # Main entry form
+    ├── login.html
+    ├── all-expenses.html  # Filter / chart / export view
+    ├── script.js
+    ├── all-expenses.js
+    ├── style.css
+    └── all-expenses.css
 ```
 
-## Mobile Optimization
+## Deployment
 
-- Touch-friendly interface with large buttons
-- Responsive design that works on all screen sizes
-- Fast loading with minimal JavaScript
-- Native form controls for better mobile experience
-- Prevents zoom on input focus (iOS)
-
-## Future Enhancements
-
-- Export data to CSV
-- Category customization
-- Expense search and filtering
-- Monthly/yearly summaries
-- Data visualization with charts
-- Multi-user support with authentication
-
-## Development
-
-To modify the application:
-
-1. **Backend changes**: Edit `server.js` for API endpoints
-2. **Frontend changes**: Edit files in `public/` directory
-3. **Database changes**: Modify schema in `server.js` initialization
-4. **Styling**: Update `public/styles.css` for visual changes
-
-The application automatically creates the database on first run, so no additional setup is required.
+Push to `main` → Vercel auto-deploys. Env vars must be set in the Vercel dashboard.

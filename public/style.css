@@ -71,53 +71,6 @@ header.flex h1 {
     gap: 12px;
 }
 
-/* Connection Status */
-.connection-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 20px;
-    font-size: 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
-    color: #666;
-}
-
-.connection-status.connected {
-    background: rgba(34, 197, 94, 0.1);
-    border-color: rgba(34, 197, 94, 0.3);
-}
-
-.connection-status.checking {
-    background: rgba(234, 179, 8, 0.1);
-    border-color: rgba(234, 179, 8, 0.3);
-}
-
-.connection-status.disconnected {
-    background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.3);
-}
-
-#connection-indicator {
-    font-size: 0.7rem;
-    filter: drop-shadow(0 0 2px currentColor);
-}
-
-#connection-text {
-    font-weight: 500;
-    color: #a8b3cf;
-}
-
-.connection-status.checking #connection-text {
-    color: #eab308;
-}
-
-.connection-status.disconnected #connection-text {
-    color: #ef4444;
-}
-
 /* Action Buttons */
 .export-btn,
 .close-btn {
@@ -263,12 +216,6 @@ header.flex h1 {
 #income-btn.active {
     border-color: #22c55e;
     background: #22c55e;
-}
-
-/* Hide old toggle button styles */
-.toggle-container,
-.toggle-btn {
-    display: none !important;
 }
 
 /* Label with inline checkbox */
@@ -966,21 +913,6 @@ tr:hover {
     color: #a8b3cf;
     font-size: 0.9rem;
     margin-bottom: 15px;
-}
-
-.guest-btn {
-    color: #67e8f9;
-    text-decoration: none;
-    font-weight: 500;
-    padding: 8px 16px;
-    border: 1px solid #67e8f9;
-    border-radius: 6px;
-    transition: all 0.3s ease;
-}
-
-.guest-btn:hover {
-    background: #67e8f9;
-    color: #1a1a1a;
 }
 
 .alert {

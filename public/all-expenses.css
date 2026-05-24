@@ -40,52 +40,6 @@ header h1 {
     gap: 12px;
 }
 
-/* Connection Status */
-.connection-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 20px;
-    font-size: 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
-}
-
-.connection-status.connected {
-    background: rgba(34, 197, 94, 0.1);
-    border-color: rgba(34, 197, 94, 0.3);
-}
-
-.connection-status.checking {
-    background: rgba(234, 179, 8, 0.1);
-    border-color: rgba(234, 179, 8, 0.3);
-}
-
-.connection-status.disconnected {
-    background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.3);
-}
-
-#connection-indicator {
-    font-size: 0.7rem;
-    filter: drop-shadow(0 0 2px currentColor);
-}
-
-#connection-text {
-    font-weight: 500;
-    color: #e6e8eb;
-}
-
-.connection-status.checking #connection-text {
-    color: #eab308;
-}
-
-.connection-status.disconnected #connection-text {
-    color: #ef4444;
-}
-
 .export-btn,
 .close-btn {
     background: linear-gradient(135deg, #4fc3f7, #29b6f6);

@@ -127,8 +127,7 @@ async function loadAllExpenses() {
             }
             throw new Error('Failed to load expenses');
         }
-        if (!response.ok) throw new Error('Failed to fetch expenses');
-        
+
         allExpenses = await response.json();
         filteredExpenses = [...allExpenses];
           updateSummary();
@@ -565,13 +564,12 @@ function getBarChartData(range) {
                 break;
             case 'current-month':
                 startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
                 break;
             case 'current-year':
                 startDate = new Date(now.getFullYear(), 0, 1);
-                endDate = new Date(now.getFullYear(), 11, 31);
                 break;
-        }          filteredData = filteredData.filter(expense => {
+        }
+        filteredData = filteredData.filter(expense => {
             // Use safe date parsing to handle various date formats
             const expenseDate = safeParseDate(expense.expense_date);
             return expenseDate && expenseDate >= startDate;

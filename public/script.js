@@ -284,7 +284,6 @@ function hideSuggestions(suggestionsDiv) {
 
 // Fetch and display notes suggestions as chips based on "what" field
 async function fetchNotesSuggestions(whatValue) {
-    console.log('fetchNotesSuggestions called with:', whatValue);
     if (!whatValue) {
         notesChips.innerHTML = '';
         return;
@@ -292,13 +291,10 @@ async function fetchNotesSuggestions(whatValue) {
 
     try {
         const url = `/api/suggestions/notes-by-what?what=${encodeURIComponent(whatValue)}`;
-        console.log('Fetching:', url);
         const response = await fetch(url, {
             headers: getAuthHeaders()
         });
-        console.log('Response status:', response.status);
         const suggestions = await response.json();
-        console.log('Suggestions received:', suggestions);
 
         if (suggestions.length > 0) {
             displayNotesChips(suggestions);
