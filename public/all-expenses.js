@@ -817,12 +817,12 @@ let parsedImportData = [];
 
 function downloadSampleCSV() {
     const sampleData = [
-        ['Date', 'Amount', 'Category', 'What', 'Notes', 'Is Taxable'],
-        ['2025-01-15', '50.25', 'food', 'Grocery shopping', 'Weekly groceries', 'false'],
-        ['2025-01-16', '12.50', 'restaurant', 'Lunch', 'Business lunch', 'false'],
-        ['2025-01-17', '75.00', 'travel', 'Gas', 'Road trip fuel', 'false'],
-        ['2025-01-18', '25.99', 'subscriptions', 'Netflix', 'Monthly subscription', 'false'],
-        ['2025-01-19', '150.00', 'clothes + accessories', 'New shoes', 'Running shoes', 'false']
+        ['Date', 'Amount', 'Category', 'What', 'Notes', 'Is Income', 'Is Taxable'],
+        ['2025-01-15', '50.25', 'food', 'Grocery shopping', 'Weekly groceries', 'false', 'false'],
+        ['2025-01-16', '12.50', 'restaurant', 'Lunch', 'Business lunch', '', 'false'],
+        ['2025-01-17', '75.00', 'travel', 'Gas', 'Road trip fuel', 'false', 'false'],
+        ['2025-01-20', '2500.00', 'work', 'Paycheck', 'Bi-weekly salary', 'true', 'true'],
+        ['2025-01-22', '150.00', 'gift', 'Birthday money', '', 'true', 'false']
     ];
 
     const csvContent = sampleData.map(row => 
@@ -917,6 +917,7 @@ function parseCSV(csvText) {
         else if (cleanHeader.includes('what') || cleanHeader.includes('description')) headerMap.what = index;
         else if (cleanHeader.includes('notes')) headerMap.notes = index;
         else if (cleanHeader.includes('taxable')) headerMap.is_taxable = index;
+        else if (cleanHeader.includes('income')) headerMap.is_income = index;
     });
 
     // Parse data rows
@@ -987,8 +988,11 @@ function parseExpenseRow(row, headerMap, rowNumber) {
     const amount = parseFloat(amountStr);
     if (isNaN(amount) || amount === 0) throw new Error('Invalid amount');
 
-    // All amounts are treated as expenses (is_positive = false)
-    const isPositive = false;
+    // Parse is_income: 'true'/'1' → income, anything else (incl. blank) → expense
+    const isIncomeStr = headerMap.is_income !== undefined
+        ? row[headerMap.is_income]?.trim()?.toLowerCase()
+        : '';
+    const isPositive = isIncomeStr === 'true' || isIncomeStr === '1';
 
     // Parse category
     const category = row[headerMap.category]?.trim();
@@ -1022,8 +1026,8 @@ function showImportPreview() {
     // Show first 5 rows as preview
     const preview = parsedImportData.slice(0, 5);
     const previewHtml = preview.map(expense => {
-        // All imports are expenses, so show with negative prefix
-        return `${expense.expense_date} | -$${expense.amount.toFixed(2)} | ${expense.category} | ${expense.what} | ${expense.notes}`;
+        const sign = expense.is_positive ? '+' : '-';
+        return `${expense.expense_date} | ${sign}$${expense.amount.toFixed(2)} | ${expense.category} | ${expense.what} | ${expense.notes}`;
     }).join('\n');
 
     previewTable.textContent = previewHtml;
