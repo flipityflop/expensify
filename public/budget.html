@@ -6,10 +6,16 @@
     <title>Budget - Expense Tracker</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        .yearly-badge {
-            margin-left: 6px;
-            font-size: 0.75rem;
-            color: #a8b3cf;
+        .section-title {
+            font-size: 1.1rem;
+            color: #7dd3fc;
+            margin: 28px 0 10px;
+        }
+
+        .section-note {
+            color: #9ca3af;
+            font-size: 0.85rem;
+            margin: -6px 0 12px;
         }
 
         .goal-input {
@@ -56,6 +62,7 @@
             </div>
         </div>
 
+        <h2 class="section-title" id="monthly-heading">Monthly goals</h2>
         <div class="table-container">
             <table>
                 <thead>
@@ -69,6 +76,23 @@
                 </thead>
                 <tbody id="budget-tbody"></tbody>
                 <tfoot id="budget-tfoot"></tfoot>
+            </table>
+        </div>
+
+        <h2 class="section-title" id="yearly-heading">Yearly goals</h2>
+        <p class="section-note">Lumpy month to month, so these are set and tracked against the whole calendar year.</p>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Goal</th>
+                        <th>Actual</th>
+                        <th>Difference</th>
+                        <th>Set Goal</th>
+                    </tr>
+                </thead>
+                <tbody id="yearly-tbody"></tbody>
             </table>
         </div>
 

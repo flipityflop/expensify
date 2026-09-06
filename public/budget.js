@@ -1,6 +1,9 @@
 const monthInput = document.getElementById('month');
 const tbody = document.getElementById('budget-tbody');
 const tfoot = document.getElementById('budget-tfoot');
+const yearlyTbody = document.getElementById('yearly-tbody');
+const monthlyHeading = document.getElementById('monthly-heading');
+const yearlyHeading = document.getElementById('yearly-heading');
 const loadingDiv = document.getElementById('loading');
 
 let expenses = [];
@@ -18,8 +21,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     monthInput.addEventListener('change', render);
     // 'change' on a number input already means blur-with-a-new-value or Enter.
-    tbody.addEventListener('change', e => {
-        if (e.target.dataset.category) saveGoal(e.target.dataset.category, e.target.value);
+    // Delegated from the document so both tables are covered by one listener.
+    document.addEventListener('change', e => {
+        if (e.target.dataset && e.target.dataset.category) {
+            saveGoal(e.target.dataset.category, e.target.value);
+        }
     });
 
     load();
@@ -70,35 +76,42 @@ function diffCell(diff) {
     return `<td class="${diff >= 0 ? 'under' : 'over'}">${diff < 0 ? '-' : '+'}${money(Math.abs(diff))}</td>`;
 }
 
+function rowHtml(category, month) {
+    const goal = goals[category];
+    const spent = actual(category, month);
+
+    return `
+        <tr>
+            <td>${category}</td>
+            <td>${goal === undefined ? '—' : money(goal)}</td>
+            <td>${money(spent)}</td>
+            ${diffCell(goal === undefined ? null : goal - spent)}
+            <td><input type="number" class="goal-input" step="0.01" min="0" data-category="${category}" value="${goal ?? ''}"></td>
+        </tr>
+    `;
+}
+
 function render() {
     const month = monthInput.value;
     if (!month) return;
 
-    let goalTotal = 0;
-    let actualTotal = 0;
+    const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
+    const yearly = CATEGORIES.filter(c => goalPeriod(c) === 'yearly');
 
-    tbody.innerHTML = CATEGORIES.map(category => {
-        const yearly = goalPeriod(category) === 'yearly';
-        const goal = goals[category];
-        const spent = actual(category, month);
+    tbody.innerHTML = monthly.map(c => rowHtml(c, month)).join('');
+    yearlyTbody.innerHTML = yearly.map(c => rowHtml(c, month)).join('');
 
-        // Yearly rows are left out of the totals - a year's goal against a
-        // month's spending would not add up to anything meaningful.
-        if (!yearly) {
-            goalTotal += goal || 0;
-            actualTotal += spent;
-        }
+    // Which period each table covers, so the two Actual columns are not read
+    // as the same span of time. Mid-month date, so no timezone edge case.
+    const [year, mon] = month.split('-');
+    const label = new Date(year, mon - 1, 15).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+    monthlyHeading.textContent = `Monthly goals — ${label}`;
+    yearlyHeading.textContent = `Yearly goals — ${year}`;
 
-        return `
-            <tr>
-                <td>${category}${yearly ? '<span class="yearly-badge">(yearly)</span>' : ''}</td>
-                <td>${goal === undefined ? '—' : money(goal)}</td>
-                <td>${money(spent)}</td>
-                ${diffCell(goal === undefined ? null : goal - spent)}
-                <td><input type="number" class="goal-input" step="0.01" min="0" data-category="${category}" value="${goal ?? ''}"></td>
-            </tr>
-        `;
-    }).join('');
+    // Totals cover the monthly table only; a year's goal against a month's
+    // spending would not add up to anything meaningful.
+    const goalTotal = monthly.reduce((sum, c) => sum + (goals[c] || 0), 0);
+    const actualTotal = monthly.reduce((sum, c) => sum + actual(c, month), 0);
 
     tfoot.innerHTML = `
         <tr>
