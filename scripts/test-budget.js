@@ -83,4 +83,36 @@ const spend = call(`expenses.filter(e => !e.is_positive && e.expense_date.starts
 assert.strictEqual(spend, 170);
 assert.strictEqual(Math.min(100, (spend / budget) * 100), 34);
 
+// ---- autofill scaling ----------------------------------------------------
+// Groceries averages 200, Gifts 20; everything else 0. Historic total 220.
+const scaled = target => call(`(() => {
+    const avgs = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly')
+        .map(c => [c, averageMonthly(c, '2026-04')]).filter(([, a]) => a !== null);
+    const historic = avgs.reduce((s, [, a]) => s + a, 0);
+    const scale = ${target} && historic ? ${target} / historic : 1;
+    return JSON.stringify(Object.fromEntries(
+        avgs.map(([c, a]) => [c, Math.round(a * scale * 100) / 100])));
+})()`);
+
+// No income set: raw averages, untouched.
+const raw = JSON.parse(scaled(0));
+assert.strictEqual(raw.Groceries, 200);
+assert.strictEqual(raw.Gifts, 20);
+
+// 1100 to spend against a 220 history = 5x. Proportions hold, total matches.
+const split = JSON.parse(scaled(1100));
+assert.strictEqual(split.Groceries, 1000);
+assert.strictEqual(split.Gifts, 100);
+assert.strictEqual(split.Rent, 0);
+const sum = Object.values(split).reduce((s, v) => s + v, 0);
+assert.ok(Math.abs(sum - 1100) < 0.05, `split totals ${sum}, expected ~1100`);
+
+// Scaling down works the same way.
+const tight = JSON.parse(scaled(110));
+assert.strictEqual(tight.Groceries, 100);
+assert.strictEqual(tight.Gifts, 10);
+
+// The reserved key must never be rendered or budgeted as a category.
+assert.ok(!call(`CATEGORIES.includes(SPENDING_KEY)`), 'SPENDING_KEY leaked into CATEGORIES');
+
 console.log('budget: all assertions pass');

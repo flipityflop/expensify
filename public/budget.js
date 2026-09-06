@@ -5,6 +5,7 @@ const yearlyTbody = document.getElementById('yearly-tbody');
 const monthlyHeading = document.getElementById('monthly-heading');
 const yearlyHeading = document.getElementById('yearly-heading');
 const autofillBtn = document.getElementById('autofill');
+const spendingInput = document.getElementById('spending-budget');
 const progressLabel = document.getElementById('progress-label');
 const progressFigures = document.getElementById('progress-figures');
 const progressFill = document.getElementById('budget-progress-fill');
@@ -12,6 +13,12 @@ const loadingDiv = document.getElementById('loading');
 
 let expenses = [];
 let goals = {}; // category -> goal amount
+
+// How much income is being put towards spending each month. Stored as one
+// reserved row in budget_goals rather than its own table: that table is
+// already category -> amount with an upsert route, and the leading
+// underscores keep it out of the 21 real categories the page renders.
+const SPENDING_KEY = '__spending_budget__';
 
 document.addEventListener('DOMContentLoaded', function() {
     if (!checkAuth()) {
@@ -25,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     monthInput.addEventListener('change', render);
     autofillBtn.addEventListener('click', autofill);
+    spendingInput.addEventListener('change', () => saveGoal(SPENDING_KEY, spendingInput.value));
     // 'change' on a number input already means blur-with-a-new-value or Enter.
     // Delegated from the document so both tables are covered by one listener.
     document.addEventListener('change', e => {
@@ -52,6 +60,8 @@ async function load() {
 
         expenses = await expensesRes.json();
         (await goalsRes.json()).forEach(goal => goals[goal.category] = goal.amount);
+
+        if (goals[SPENDING_KEY] !== undefined) spendingInput.value = goals[SPENDING_KEY];
 
         loadingDiv.style.display = 'none';
         render();
@@ -199,6 +209,10 @@ async function saveGoal(category, value) {
     }
 }
 
+// Past averages give the shape, the income figure gives the scale: each goal is
+// its share of historical spending, applied to whatever is being put towards
+// spending this month. With no income set, the raw averages are used as-is.
+//
 // Yearly goals are left out: a twelve-month total is not an average of months.
 async function autofill() {
     const month = monthInput.value;
@@ -210,14 +224,23 @@ async function autofill() {
     if (!averages.length) {
         return alert(`No months before ${month} to average.`);
     }
-    if (!confirm(`Overwrite ${averages.length} monthly goals with the average spend before ${month}?`)) {
-        return;
-    }
+
+    const historic = averages.reduce((sum, [, avg]) => sum + avg, 0);
+    const target = goals[SPENDING_KEY];
+    // Guard the divisor: with no prior spending there are no proportions to
+    // scale, and every goal would come out NaN.
+    const scale = target && historic ? target / historic : 1;
+
+    const question = scale === 1
+        ? `Overwrite ${averages.length} monthly goals with the average spend before ${month}?`
+        : `Split ${money(target)} across ${averages.length} monthly goals, in proportion to spending before ${month}?`
+          + `\n\nAverages total ${money(historic)}, so every goal is scaled by ${scale.toFixed(2)}x.`;
+    if (!confirm(question)) return;
 
     autofillBtn.disabled = true;
     try {
-        for (const [category, amount] of averages) {
-            await putGoal(category, amount);
+        for (const [category, avg] of averages) {
+            await putGoal(category, Math.round(avg * scale * 100) / 100);
         }
         render();
     } catch (error) {

@@ -1513,3 +1513,13 @@ tr:hover {
     border-color: #67e8f9;
     color: #04222a;
 }
+
+/* Logout lives at the bottom of the page - it is the least-wanted button on
+   any screen, and the header is prime real estate. */
+.page-footer {
+    display: flex;
+    justify-content: center;
+    margin: 32px 0 16px;
+    padding-top: 20px;
+    border-top: 1px solid #2a3441;
+}

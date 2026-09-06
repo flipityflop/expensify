@@ -80,7 +80,6 @@
 
         <header class="flex">
             <h1>🎯 Budget</h1>
-            <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
         </header>
 
         <div class="budget-progress">
@@ -98,6 +97,12 @@
                 <label for="month">Month:</label>
                 <input type="month" id="month">
             </div>
+            <div class="filter-group">
+                <label for="spending-budget">Income to spend (monthly):</label>
+                <input type="number" id="spending-budget" step="0.01" min="0" placeholder="e.g. 4000">
+                <button type="button" id="autofill" class="autofill-btn"
+                        title="Split the income above across the monthly categories, in proportion to what each has averaged per month. Leave the income blank to use the raw averages.">Autofill avg</button>
+            </div>
         </div>
 
         <h2 class="section-title" id="monthly-heading">Monthly goals</h2>
@@ -109,11 +114,7 @@
                         <th>Goal</th>
                         <th>Actual</th>
                         <th>Difference</th>
-                        <th>
-                            Set Goal
-                            <button type="button" id="autofill" class="autofill-btn"
-                                    title="Fill every monthly goal with that category's average spend per month before the selected month">Autofill avg</button>
-                        </th>
+                        <th>Set Goal</th>
                     </tr>
                 </thead>
                 <tbody id="budget-tbody"></tbody>
@@ -139,6 +140,10 @@
         </div>
 
         <div id="loading" class="loading">Loading budget...</div>
+
+        <div class="page-footer">
+            <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
+        </div>
     </div>
 
     <script src="categories.js"></script>
