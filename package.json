@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node scripts/migrate-v3.js --selftest && node scripts/test-csv-roundtrip.js"
+    "test": "node scripts/migrate-v3.js --selftest && node scripts/test-csv-roundtrip.js && node scripts/test-budget.js"
   },
   "keywords": [],
   "author": "",

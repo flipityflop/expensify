@@ -36,6 +36,34 @@
         .under { color: #22c55e; font-weight: 600; }
         .over  { color: #ef4444; font-weight: 600; }
 
+        .budget-progress-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+            color: #a8b3cf;
+            font-size: 0.9rem;
+        }
+
+        #progress-figures { font-weight: 600; color: #e6e8eb; }
+
+        /* .progress-bar / .progress-fill come from style.css (green gradient). */
+        .progress-fill.over { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+        .autofill-btn {
+            margin-left: 8px;
+            padding: 4px 10px;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            background: #374151;
+            color: #e6e8eb;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .autofill-btn:hover { border-color: #67e8f9; color: #67e8f9; }
+        .autofill-btn:disabled { opacity: 0.5; cursor: default; }
+
         tfoot td {
             font-weight: 700;
             border-top: 2px solid #2a3441;
@@ -55,6 +83,16 @@
             <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
         </header>
 
+        <div class="budget-progress">
+            <div class="budget-progress-head">
+                <span id="progress-label">Total spend</span>
+                <span id="progress-figures">—</span>
+            </div>
+            <div class="progress-bar">
+                <div id="budget-progress-fill" class="progress-fill"></div>
+            </div>
+        </div>
+
         <div class="filters">
             <div class="filter-group">
                 <label for="month">Month:</label>
@@ -71,7 +109,11 @@
                         <th>Goal</th>
                         <th>Actual</th>
                         <th>Difference</th>
-                        <th>Set Goal</th>
+                        <th>
+                            Set Goal
+                            <button type="button" id="autofill" class="autofill-btn"
+                                    title="Fill every monthly goal with that category's average spend per month before the selected month">Autofill avg</button>
+                        </th>
                     </tr>
                 </thead>
                 <tbody id="budget-tbody"></tbody>
