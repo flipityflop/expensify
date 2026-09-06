@@ -115,4 +115,54 @@ assert.strictEqual(tight.Gifts, 10);
 // The reserved key must never be rendered or budgeted as a category.
 assert.ok(!call(`CATEGORIES.includes(SPENDING_KEY)`), 'SPENDING_KEY leaked into CATEGORIES');
 
+// ---- fixed categories ----------------------------------------------------
+// Mirrors autofill(): fixed costs come off the income, the rest is split
+// proportionally across what is left.
+const withFixed = target => call(`(() => {
+    const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
+    const fixedTotal = monthly.filter(c => fixed[c]).reduce((s, c) => s + (goals[c] || 0), 0);
+    const avgs = monthly.filter(c => !fixed[c])
+        .map(c => [c, averageMonthly(c, '2026-04')]).filter(([, a]) => a !== null);
+    const historic = avgs.reduce((s, [, a]) => s + a, 0);
+    const available = ${target} - fixedTotal;
+    const scale = ${target} && historic ? available / historic : 1;
+    return JSON.stringify({ fixedTotal, available, scale,
+        written: Object.fromEntries(avgs.map(([c, a]) => [c, Math.round(a * scale * 100) / 100])) });
+})()`);
+
+// Rent pinned at 500. Income 1500 -> 1000 left, split over Groceries 200 +
+// Gifts 20 = 220 of history, so 4.5454x.
+vm.runInContext(`goals = { Rent: 500 }; fixed = { Rent: true };`, ctx);
+const f = JSON.parse(withFixed(1500));
+assert.strictEqual(f.fixedTotal, 500);
+assert.strictEqual(f.available, 1000);
+
+// Rent must not be rewritten, and must not be scaled.
+assert.ok(!Object.keys(f.written).includes('Rent'), 'autofill rewrote a fixed category');
+assert.strictEqual(call(`goals.Rent`), 500, 'fixed amount changed');
+
+assert.strictEqual(f.written.Groceries, 909.09);   // 200/220 * 1000
+assert.strictEqual(f.written.Gifts, 90.91);        //  20/220 * 1000
+const flexSum = Object.values(f.written).reduce((s, v) => s + v, 0);
+assert.ok(Math.abs(flexSum + f.fixedTotal - 1500) < 0.05,
+    `fixed ${f.fixedTotal} + flexible ${flexSum} should equal the 1500 income`);
+
+// Lowering the income squeezes only the flexible half; Rent holds at 500.
+const tightF = JSON.parse(withFixed(1000));
+assert.strictEqual(tightF.available, 500);
+assert.strictEqual(tightF.written.Groceries, 454.55);
+assert.strictEqual(call(`goals.Rent`), 500, 'fixed amount moved when income fell');
+
+// Fixed costs exceeding the income must be refused, not turned negative.
+vm.runInContext(`goals = { Rent: 2000 }; fixed = { Rent: true };`, ctx);
+assert.ok(JSON.parse(withFixed(1500)).available <= 0, 'over-committed case should be refused');
+
+// Editing an amount must not silently clear the fixed flag: putGoal defaults
+// isFixed to whatever is already stored.
+vm.runInContext(`goals = { Rent: 500 }; fixed = { Rent: true };`, ctx);
+assert.ok(call(`(function () { return putGoal.length; })()`) <= 3, 'putGoal signature changed');
+assert.ok(call(`!!fixed['Rent']`), 'fixed flag lost');
+
+vm.runInContext(`goals = {}; fixed = {};`, ctx);
+
 console.log('budget: all assertions pass');

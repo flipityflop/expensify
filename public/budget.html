@@ -36,6 +36,21 @@
         .under { color: #22c55e; font-weight: 600; }
         .over  { color: #ef4444; font-weight: 600; }
 
+        /* Fixed rows read as "autofill will not touch this". */
+        .fixed-row td:first-child::after {
+            content: " 📌";
+            font-size: 0.75rem;
+        }
+
+        .fixed-row { background: #171c28; }
+
+        td input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #67e8f9;
+        }
+
         .budget-progress-head {
             display: flex;
             justify-content: space-between;
@@ -115,6 +130,7 @@
                         <th>Actual</th>
                         <th>Difference</th>
                         <th>Set Goal</th>
+                        <th title="A fixed cost. Autofill leaves it alone and sizes everything else around it.">Fixed</th>
                     </tr>
                 </thead>
                 <tbody id="budget-tbody"></tbody>
@@ -133,6 +149,7 @@
                         <th>Actual</th>
                         <th>Difference</th>
                         <th>Set Goal</th>
+                        <th title="A fixed cost. Autofill leaves it alone and sizes everything else around it.">Fixed</th>
                     </tr>
                 </thead>
                 <tbody id="yearly-tbody"></tbody>

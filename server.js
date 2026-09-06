@@ -46,8 +46,13 @@ const initPromise = (async () => {
         category TEXT NOT NULL UNIQUE,
         amount REAL NOT NULL,
         period TEXT NOT NULL DEFAULT 'monthly',
+        fixed INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+    // Rent does not shrink because there is less to spend. A fixed goal is set
+    // by hand and autofill works around it, never over it. Orthogonal to
+    // `period` - a goal can be fixed and yearly.
+    try { await db.execute('ALTER TABLE budget_goals ADD COLUMN fixed INTEGER DEFAULT 0'); } catch (_) {}
 })();
 
 // Convert libsql Row objects to plain JS objects for JSON serialization
@@ -190,19 +195,20 @@ app.get('/api/budget-goals', requireAuth, async (req, res) => {
 // this is the shape to copy.
 app.put('/api/budget-goals', requireAuth, async (req, res) => {
     await initPromise;
-    const { category, amount, period } = req.body;
+    const { category, amount, period, fixed } = req.body;
     if (!category || amount === undefined || amount === null || isNaN(Number(amount))) {
         return res.status(400).json({ error: 'category and a numeric amount are required' });
     }
     try {
         await db.execute({
-            sql: `INSERT INTO budget_goals (category, amount, period, updated_at)
-                  VALUES (?, ?, ?, ?)
+            sql: `INSERT INTO budget_goals (category, amount, period, fixed, updated_at)
+                  VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(category) DO UPDATE SET
                       amount = excluded.amount,
                       period = excluded.period,
+                      fixed = excluded.fixed,
                       updated_at = excluded.updated_at`,
-            args: [category, Number(amount), period === 'yearly' ? 'yearly' : 'monthly', new Date().toISOString()]
+            args: [category, Number(amount), period === 'yearly' ? 'yearly' : 'monthly', fixed ? 1 : 0, new Date().toISOString()]
         });
         res.json({ message: 'Budget goal saved' });
     } catch (err) {

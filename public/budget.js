@@ -13,6 +13,7 @@ const loadingDiv = document.getElementById('loading');
 
 let expenses = [];
 let goals = {}; // category -> goal amount
+let fixed = {}; // category -> true when the goal is a fixed cost, set by hand
 
 // How much income is being put towards spending each month. Stored as one
 // reserved row in budget_goals rather than its own table: that table is
@@ -36,9 +37,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // 'change' on a number input already means blur-with-a-new-value or Enter.
     // Delegated from the document so both tables are covered by one listener.
     document.addEventListener('change', e => {
-        if (e.target.dataset && e.target.dataset.category) {
-            saveGoal(e.target.dataset.category, e.target.value);
-        }
+        const data = e.target.dataset;
+        if (!data) return;
+        if (data.fixedFor) toggleFixed(data.fixedFor, e.target.checked);
+        else if (data.category) saveGoal(data.category, e.target.value);
     });
 
     load();
@@ -59,7 +61,10 @@ async function load() {
         if (!expensesRes.ok || !goalsRes.ok) throw new Error('Failed to load budget');
 
         expenses = await expensesRes.json();
-        (await goalsRes.json()).forEach(goal => goals[goal.category] = goal.amount);
+        (await goalsRes.json()).forEach(goal => {
+            goals[goal.category] = goal.amount;
+            if (goal.fixed) fixed[goal.category] = true;
+        });
 
         if (goals[SPENDING_KEY] !== undefined) spendingInput.value = goals[SPENDING_KEY];
 
@@ -109,17 +114,21 @@ function diffCell(diff) {
     return `<td class="${diff >= 0 ? 'under' : 'over'}">${diff < 0 ? '-' : '+'}${money(Math.abs(diff))}</td>`;
 }
 
-function rowHtml(category, month) {
+// `showFixed` is off for the yearly table: autofill never touches those, so a
+// checkbox there would do nothing.
+function rowHtml(category, month, showFixed) {
     const goal = goals[category];
     const spent = actual(category, month);
+    const isFixed = !!fixed[category];
 
     return `
-        <tr>
+        <tr${isFixed ? ' class="fixed-row"' : ''}>
             <td>${category}</td>
             <td>${goal === undefined ? '—' : money(goal)}</td>
             <td>${money(spent)}</td>
             ${diffCell(goal === undefined ? null : goal - spent)}
             <td><input type="number" class="goal-input" step="0.01" min="0" data-category="${category}" value="${goal ?? ''}"></td>
+            <td>${showFixed ? `<input type="checkbox" data-fixed-for="${category}"${isFixed ? ' checked' : ''}>` : ''}</td>
         </tr>
     `;
 }
@@ -131,8 +140,8 @@ function render() {
     const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
     const yearly = CATEGORIES.filter(c => goalPeriod(c) === 'yearly');
 
-    tbody.innerHTML = monthly.map(c => rowHtml(c, month)).join('');
-    yearlyTbody.innerHTML = yearly.map(c => rowHtml(c, month)).join('');
+    tbody.innerHTML = monthly.map(c => rowHtml(c, month, true)).join('');
+    yearlyTbody.innerHTML = yearly.map(c => rowHtml(c, month, false)).join('');
 
     // Which period each table covers, so the two Actual columns are not read
     // as the same span of time. Mid-month date, so no timezone edge case.
@@ -152,6 +161,7 @@ function render() {
             <td>${money(goalTotal)}</td>
             <td>${money(actualTotal)}</td>
             ${diffCell(goalTotal - actualTotal)}
+            <td></td>
             <td></td>
         </tr>
     `;
@@ -182,18 +192,41 @@ function renderProgress(month, label) {
     progressFill.classList.toggle('over', budget > 0 && spend > budget);
 }
 
-async function putGoal(category, amount) {
+// The upsert rewrites the whole row, so `fixed` has to be sent every time or
+// editing an amount would quietly clear the flag. Defaults to what is already
+// stored.
+async function putGoal(category, amount, isFixed = !!fixed[category]) {
     const response = await fetch('/api/budget-goals', {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
             ...getAuthHeaders()
         },
-        body: JSON.stringify({ category, amount, period: goalPeriod(category) })
+        body: JSON.stringify({ category, amount, period: goalPeriod(category), fixed: isFixed })
     });
 
     if (!response.ok) throw new Error(`Failed to save ${category}`);
     goals[category] = amount;
+    if (isFixed) fixed[category] = true;
+    else delete fixed[category];
+}
+
+async function toggleFixed(category, isFixed) {
+    // A fixed cost with no amount is meaningless - autofill would reserve zero
+    // for it and then scale it as if it were discretionary anyway.
+    if (goals[category] === undefined) {
+        alert(`Set an amount for ${category} first — a fixed cost needs one.`);
+        return render();
+    }
+
+    try {
+        await putGoal(category, goals[category], isFixed);
+        render();
+    } catch (error) {
+        console.error('Fixed toggle error:', error);
+        alert('Error saving. Please try again.');
+        render();
+    }
 }
 
 async function saveGoal(category, value) {
@@ -216,25 +249,45 @@ async function saveGoal(category, value) {
 // Yearly goals are left out: a twelve-month total is not an average of months.
 async function autofill() {
     const month = monthInput.value;
-    const averages = CATEGORIES
-        .filter(c => goalPeriod(c) !== 'yearly')
+    const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
+
+    // Fixed costs come off the income first and are never rewritten. Scaling
+    // rent down because there is less to spend would just be a lie.
+    const fixedTotal = monthly
+        .filter(c => fixed[c])
+        .reduce((sum, c) => sum + (goals[c] || 0), 0);
+
+    const averages = monthly
+        .filter(c => !fixed[c])
         .map(c => [c, averageMonthly(c, month)])
         .filter(([, avg]) => avg !== null);
 
     if (!averages.length) {
-        return alert(`No months before ${month} to average.`);
+        return alert(`Nothing to autofill: no months before ${month} to average, or every category is fixed.`);
     }
 
     const historic = averages.reduce((sum, [, avg]) => sum + avg, 0);
     const target = goals[SPENDING_KEY];
+    const available = target - fixedTotal;
+
+    if (target && available <= 0) {
+        return alert(
+            `Fixed costs already take ${money(fixedTotal)} of the ${money(target)} income,`
+            + ` leaving nothing for the other ${averages.length} categories.`
+            + `\n\nRaise the income or lower a fixed amount.`
+        );
+    }
+
     // Guard the divisor: with no prior spending there are no proportions to
     // scale, and every goal would come out NaN.
-    const scale = target && historic ? target / historic : 1;
+    const scale = target && historic ? available / historic : 1;
 
     const question = scale === 1
         ? `Overwrite ${averages.length} monthly goals with the average spend before ${month}?`
-        : `Split ${money(target)} across ${averages.length} monthly goals, in proportion to spending before ${month}?`
-          + `\n\nAverages total ${money(historic)}, so every goal is scaled by ${scale.toFixed(2)}x.`;
+          + (fixedTotal ? `\n\n${money(fixedTotal)} of fixed costs stays as it is.` : '')
+        : `Split ${money(available)} across ${averages.length} monthly goals, in proportion to spending before ${month}?`
+          + (fixedTotal ? `\n\n${money(target)} income less ${money(fixedTotal)} of fixed costs, which stay as they are.` : '')
+          + `\n\nTheir averages total ${money(historic)}, so each is scaled by ${scale.toFixed(2)}x.`;
     if (!confirm(question)) return;
 
     autofillBtn.disabled = true;
