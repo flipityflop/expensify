@@ -29,6 +29,7 @@ const initPromise = (async () => {
         category TEXT NOT NULL,
         what TEXT NOT NULL,
         notes TEXT,
+        merchant TEXT,
         event TEXT,
         is_taxable INTEGER DEFAULT 0,
         submission_date TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -36,6 +37,17 @@ const initPromise = (async () => {
     )`);
     try { await db.execute('ALTER TABLE expenses ADD COLUMN event TEXT'); } catch (_) {}
     try { await db.execute('ALTER TABLE expenses ADD COLUMN version INTEGER DEFAULT 1'); } catch (_) {}
+    // `notes` used to hold merchant, event and description all at once. It is
+    // kept, unwritten, as the in-place backup for the v3 split.
+    try { await db.execute('ALTER TABLE expenses ADD COLUMN merchant TEXT'); } catch (_) {}
+
+    await db.execute(`CREATE TABLE IF NOT EXISTS budget_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL UNIQUE,
+        amount REAL NOT NULL,
+        period TEXT NOT NULL DEFAULT 'monthly',
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
 })();
 
 // Convert libsql Row objects to plain JS objects for JSON serialization
@@ -81,16 +93,19 @@ app.get('/api/expenses', requireAuth, async (req, res) => {
 // Add expense
 app.post('/api/expenses', requireAuth, async (req, res) => {
     await initPromise;
-    const { amount, is_positive, expense_date, category, what, notes, event, is_taxable } = req.body;
+    const { amount, is_positive, expense_date, category, what, notes, merchant, event, is_taxable } = req.body;
     if (!amount || !expense_date || !category || !what) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
     const finalAmount = is_positive ? Math.abs(amount) : -Math.abs(amount);
     const currentTimestamp = new Date().toISOString();
+    // New rows write `merchant`, never `notes`. `notes` is accepted as a
+    // fallback so a CSV with the old header still lands somewhere sensible.
+    const finalMerchant = (merchant || notes || '').trim();
     try {
         const result = await db.execute({
-            sql: 'INSERT INTO expenses (amount, is_positive, expense_date, category, what, notes, event, is_taxable, submission_date, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            args: [finalAmount, is_positive ? 1 : 0, expense_date, category, what, notes || '', event || '', is_taxable ? 1 : 0, currentTimestamp, 2]
+            sql: 'INSERT INTO expenses (amount, is_positive, expense_date, category, what, merchant, event, is_taxable, submission_date, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [finalAmount, is_positive ? 1 : 0, expense_date, category, what, finalMerchant, event || '', is_taxable ? 1 : 0, currentTimestamp, 2]
         });
         res.json({ id: Number(result.lastInsertRowid), message: 'Expense added successfully' });
     } catch (err) {
@@ -113,16 +128,16 @@ app.get('/api/autocomplete/what', requireAuth, async (req, res) => {
     }
 });
 
-// Autocomplete: notes
-app.get('/api/autocomplete/notes', requireAuth, async (req, res) => {
+// Autocomplete: merchant (replaces the old notes autocomplete)
+app.get('/api/autocomplete/merchant', requireAuth, async (req, res) => {
     await initPromise;
     const query = req.query.q || '';
     try {
         const result = await db.execute({
-            sql: "SELECT notes, COUNT(*) as count FROM expenses WHERE notes LIKE ? AND notes != '' GROUP BY notes ORDER BY count DESC LIMIT 10",
+            sql: "SELECT merchant, COUNT(*) as count FROM expenses WHERE merchant LIKE ? AND IFNULL(merchant, '') != '' GROUP BY merchant ORDER BY count DESC LIMIT 10",
             args: [`%${query}%`]
         });
-        res.json(toRows(result).map(r => r.notes));
+        res.json(toRows(result).map(r => r.merchant));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -143,17 +158,53 @@ app.get('/api/autocomplete/event', requireAuth, async (req, res) => {
     }
 });
 
-// Suggestions: notes by what
-app.get('/api/suggestions/notes-by-what', requireAuth, async (req, res) => {
+// The merchants most often used in a category, for the tappable chips on the
+// entry form. Replaces the old notes-by-what suggestions.
+app.get('/api/merchants-by-category', requireAuth, async (req, res) => {
     await initPromise;
-    const what = req.query.what || '';
-    if (!what) return res.json([]);
+    const category = req.query.category || '';
+    if (!category) return res.json([]);
     try {
         const result = await db.execute({
-            sql: "SELECT notes, COUNT(*) as count FROM expenses WHERE LOWER(what) = LOWER(?) AND notes != '' GROUP BY notes ORDER BY count DESC LIMIT 5",
-            args: [what]
+            sql: "SELECT merchant, COUNT(*) as count FROM expenses WHERE category = ? AND IFNULL(merchant, '') != '' GROUP BY merchant ORDER BY count DESC LIMIT 6",
+            args: [category]
         });
-        res.json(toRows(result).map(r => r.notes));
+        res.json(toRows(result).map(r => r.merchant));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Budget goals
+app.get('/api/budget-goals', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM budget_goals ORDER BY category');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Upsert one goal. There is no other update route in this app - if you add one,
+// this is the shape to copy.
+app.put('/api/budget-goals', requireAuth, async (req, res) => {
+    await initPromise;
+    const { category, amount, period } = req.body;
+    if (!category || amount === undefined || amount === null || isNaN(Number(amount))) {
+        return res.status(400).json({ error: 'category and a numeric amount are required' });
+    }
+    try {
+        await db.execute({
+            sql: `INSERT INTO budget_goals (category, amount, period, updated_at)
+                  VALUES (?, ?, ?, ?)
+                  ON CONFLICT(category) DO UPDATE SET
+                      amount = excluded.amount,
+                      period = excluded.period,
+                      updated_at = excluded.updated_at`,
+            args: [category, Number(amount), period === 'yearly' ? 'yearly' : 'monthly', new Date().toISOString()]
+        });
+        res.json({ message: 'Budget goal saved' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

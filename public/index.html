@@ -6,6 +6,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>    <div class="container">
+        <nav class="tab-nav">
+            <a href="/">Home</a>
+            <a href="/budget.html">Budget</a>
+            <a href="/all-expenses.html">Expenses</a>
+        </nav>
+
         <header>
             <h1>💰 Expense Tracker</h1>
             <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
@@ -46,44 +52,27 @@
 
                 <div class="form-group">
                     <label for="category">Category</label>
-                    <select id="category" name="category" required>
-                        <option value="">Select category...</option>
-                        <option value="kitchen / home">Kitchen / Home</option>
-                        <option value="investments">Investments</option>
-                        <option value="office work">Office Work</option>
-                        <option value="subscriptions">Subscriptions</option>
-                        <option value="electronics personal">Electronics Personal</option>
-                        <option value="clothes + accessories">Clothes + Accessories</option>
-                        <option value="travel">Travel</option>
-                        <option value="food">Food</option>
-                        <option value="various/ debt repayment">Various / Debt Repayment</option>
-                        <option value="fun">Fun</option>
-                        <option value="rent+bills">Rent + Bills</option>
-                        <option value="gifts">Gifts</option>
-                        <option value="health">Health</option>
-                        <option value="beauty">Beauty</option>
-                        <option value="restaurant">Restaurant</option>
-                        <option value="tzedakah">Tzedakah</option>
-                    </select>
+                    <!-- Options are filled from categories.js -->
+                    <select id="category" name="category" required></select>
                 </div>
 
                 <div class="form-group">
-                    <label for="what">What</label>
+                    <label for="what">Description</label>
                     <div class="autocomplete-container">
                         <input type="text" id="what" name="what" required autocomplete="off">
                         <div id="what-suggestions" class="suggestions"></div>
                     </div>
-                </div>                <div class="form-group" id="notes-group">
-                    <label for="notes">Notes</label>
+                </div>                <div class="form-group" id="merchant-group">
+                    <label for="merchant">Merchant</label>
                     <div class="autocomplete-container">
-                        <input type="text" id="notes" name="notes" autocomplete="off">
-                        <div id="notes-suggestions" class="suggestions"></div>
+                        <input type="text" id="merchant" name="merchant" autocomplete="off">
+                        <div id="merchant-suggestions" class="suggestions"></div>
                     </div>
-                    <div id="notes-chips" class="suggestion-chips"></div>
+                    <div id="merchant-chips" class="suggestion-chips"></div>
                 </div>
 
                 <div class="form-group" id="event-group">
-                    <label for="event">Event</label>
+                    <label for="event">Event <span class="field-hint">(optional)</span></label>
                     <div class="autocomplete-container">
                         <input type="text" id="event" name="event" autocomplete="off">
                         <div id="event-suggestions" class="suggestions"></div>
@@ -113,6 +102,8 @@
         </main>
     </div>
 
+    <script src="categories.js"></script>
+    <script src="auth.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

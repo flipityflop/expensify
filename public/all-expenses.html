@@ -7,7 +7,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div class="container full-width">        <header class="flex">
+    <div class="container full-width">
+        <nav class="tab-nav">
+            <a href="/">Home</a>
+            <a href="/budget.html">Budget</a>
+            <a href="/all-expenses.html">Expenses</a>
+        </nav>
+        <header class="flex">
             <h1>📊 All Expenses</h1>            <div class="header-actions">
                 <button id="import-btn" class="import-btn" title="Import from CSV">📥 Import</button>
                 <button id="sample-btn" class="sample-btn" title="Download Sample CSV">📋 Sample</button>
@@ -109,30 +115,13 @@
             </div>
             <div class="filter-group">
                 <label for="category-filter">Category:</label>
-                <select id="category-filter">
-                    <option value="">All Categories</option>
-                    <!-- Expense categories -->
-                    <option value="kitchen / home">Kitchen / Home</option>
-                    <option value="investments">Investments</option>
-                    <option value="office work">Office Work</option>
-                    <option value="subscriptions">Subscriptions</option>
-                    <option value="electronics personal">Electronics Personal</option>
-                    <option value="clothes + accessories">Clothes + Accessories</option>
-                    <option value="travel">Travel</option>
-                    <option value="food">Food</option>
-                    <option value="various/ debt repayment">Various / Debt Repayment</option>
-                    <option value="fun">Fun</option>
-                    <option value="rent+bills">Rent + Bills</option>
-                    <option value="gifts">Gifts</option>
-                    <option value="health">Health</option>
-                    <option value="restaurant">Restaurant</option>
-                    <option value="tzedakah">Tzedakah</option>
-                    <!-- Income categories -->
-                    <option value="work">Work</option>
-                    <option value="sidejob">Sidejob</option>
-                    <option value="gift">Gift</option>
-                    <option value="other">Other</option>
-                </select>
+                <!-- Options are filled from categories.js -->
+                <select id="category-filter"></select>
+            </div>
+            <div class="filter-group">
+                <label for="event-filter">Event:</label>
+                <!-- Options are filled from the data -->
+                <select id="event-filter"></select>
             </div>
             <div class="filter-group">
                 <label for="type-filter">Type:</label>
@@ -158,17 +147,18 @@
                         <th class="sortable" data-sort="expense_date">Date</th>
                         <th class="sortable" data-sort="amount">Amount</th>
                         <th class="sortable" data-sort="category">Category</th>                        <th class="sortable" data-sort="what">
-                            What 
+                            Description
                             <label class="consolidate-header-toggle">
-                                <input type="checkbox" id="consolidate-what-toggle" title="Consolidate by category + what">
+                                <input type="checkbox" id="consolidate-what-toggle" title="Consolidate by category + description">
                             </label>
                         </th>
                         <th>
-                            Notes 
+                            Merchant
                             <label class="consolidate-header-toggle">
-                                <input type="checkbox" id="consolidate-notes-toggle" title="Consolidate by category + notes">
+                                <input type="checkbox" id="consolidate-notes-toggle" title="Consolidate by category + merchant">
                             </label>
                         </th>
+                        <th>Event</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -199,7 +189,8 @@
                             <li><strong>Amount:</strong> Positive numbers (all imports treated as expenses)</li>
                             <li><strong>Category:</strong> Must match existing categories</li>
                             <li><strong>What:</strong> Description of the expense</li>
-                            <li><strong>Notes:</strong> Optional additional notes</li>
+                            <li><strong>Merchant:</strong> Where it was bought (optional)</li>
+                            <li><strong>Event:</strong> Trip or occasion (optional)</li>
                             <li><strong>Is Taxable:</strong> true/false (optional field)</li>
                         </ul>
                         <p>Need a template? <button id="download-sample" class="sample-link">Download Sample CSV</button></p>
@@ -227,6 +218,8 @@
         </div>
     </div>
 
+    <script src="categories.js"></script>
+    <script src="auth.js"></script>
     <script src="all-expenses.js"></script>
 </body>
 </html>

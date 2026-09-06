@@ -499,9 +499,21 @@ header.flex h1 {
     color: #e6e8eb;
 }
 
-.expense-notes {
+.expense-merchant {
     font-style: italic;
     color: #9ca3af;
+}
+
+.expense-event {
+    color: #67e8f9;
+    font-size: 0.85rem;
+}
+
+/* "(optional)" next to a field label */
+.field-hint {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: #6b7280;
 }
 
 .expense-date {
@@ -1439,4 +1451,65 @@ tr:hover {
         padding: 10px 12px;
         font-size: 14px;
     }
+}
+
+/* ===== TAB NAVIGATION ===== */
+/* Deliberately not built on .type-btn: that one's active fill is id-scoped to
+   the expense/income buttons and it stacks vertically under 768px, which is
+   wrong for a nav bar. */
+.tab-nav {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    background: #111827;
+    border: 1px solid #2a3441;
+    border-radius: 10px;
+    padding: 6px;
+}
+
+.tab-nav a {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 7px;
+    color: #a8b3cf;
+    text-decoration: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.tab-nav a:hover {
+    background: #1f2937;
+    color: #e6e8eb;
+}
+
+.tab-nav a.active {
+    background: #0ea5b7;
+    color: #04222a;
+    font-weight: 600;
+}
+
+/* Selected state for the merchant chips, plus a touch target that clears the
+   44px minimum. */
+.suggestion-chip {
+    min-height: 44px;
+    padding: 10px 16px;
+}
+
+.suggestion-chip.selected {
+    background: #0ea5b7;
+    border-color: #0ea5b7;
+    color: #04222a;
+    font-weight: 600;
+}
+
+.suggestion-chip.selected:hover {
+    background: #0ea5b7;
+    border-color: #67e8f9;
+    color: #04222a;
 }

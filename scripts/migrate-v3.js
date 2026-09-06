@@ -96,6 +96,13 @@ const EVENTS = [
 ];
 const EVENT_SET = new Set(EVENTS);
 
+// Hand-entered event spellings that mean the same thing as a list entry but do
+// not match case-insensitively. Confirmed one at a time - never fuzzy-matched.
+// The other pre-existing events are genuinely distinct and are left alone.
+const EVENT_ALIASES = {
+    'sonyas birthday': "sonya's birthday"
+};
+
 // Descriptions that ended up in the notes field. They name no merchant, so the
 // merchant is left empty rather than inventing a store called "gas".
 const NOT_MERCHANTS = new Set([
@@ -180,6 +187,11 @@ function selftest() {
     // `nyc` is deliberately not an event.
     assert.strictEqual(splitNotes('nyc').merchant, 'nyc');
 
+    // Every alias must point at a real event, or it silently invents one.
+    for (const target of Object.values(EVENT_ALIASES)) {
+        assert.ok(EVENT_SET.has(target), `${target} is not a confirmed event`);
+    }
+
     // Every mapping target has to exist on the shipped list.
     const targets = [...Object.values(FROM_APP), ...BY_DESCRIPTION.map(([, t]) => t), 'Fitness'];
     for (const t of targets) assert.ok(CATEGORIES.includes(t), `${t} is not a real category`);
@@ -232,9 +244,10 @@ async function main() {
         // the same event - fold it onto the list spelling, or the filter shows
         // "Mendy's bar mitzvah" and "mendy's bar mitzvah" as two things.
         const existingEvent = String(row.event || '').trim();
-        let finalEvent = EVENT_SET.has(existingEvent.toLowerCase())
-            ? existingEvent.toLowerCase()
-            : existingEvent;
+        const lowerEvent = existingEvent.toLowerCase();
+        let finalEvent = EVENT_SET.has(lowerEvent)
+            ? lowerEvent
+            : (EVENT_ALIASES[lowerEvent] || existingEvent);
 
         // An event derived from notes never silently overwrites a different one
         // that was entered by hand - those are reported instead.
@@ -269,8 +282,10 @@ async function main() {
 
     // Events that were in the table before this ran and are not on the confirmed
     // list. Left exactly as they are - reported so they can be dealt with by hand.
-    const preExisting = expenses
-        .filter(r => String(r.event || '').trim() && !EVENT_SET.has(String(r.event).trim().toLowerCase()));
+    const preExisting = expenses.filter(r => {
+        const v = String(r.event || '').trim().toLowerCase();
+        return v && !EVENT_SET.has(v) && !EVENT_ALIASES[v];
+    });
     if (preExisting.length) {
         printDistribution(`Pre-existing events NOT on the confirmed list (${preExisting.length} rows, untouched):`,
             distribution(preExisting, 'event'));

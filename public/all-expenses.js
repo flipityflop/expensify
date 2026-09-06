@@ -5,6 +5,7 @@ const loadingDiv = document.getElementById('loading');
 const noResultsDiv = document.getElementById('no-results');
 const searchInput = document.getElementById('search');
 const categoryFilter = document.getElementById('category-filter');
+const eventFilter = document.getElementById('event-filter');
 const typeFilter = document.getElementById('type-filter');
 const dateStartFilter = document.getElementById('date-start-filter');
 const dateEndFilter = document.getElementById('date-end-filter');
@@ -23,25 +24,6 @@ let sortDirection = 'desc';
 let categoryBarChart = null;
 let trendLineChart = null;
 
-// Authentication helper functions
-function getAuthToken() {
-    return localStorage.getItem('authToken');
-}
-
-function getAuthHeaders() {
-    const token = getAuthToken();
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-}
-
-function checkAuth() {
-    const token = getAuthToken();
-    if (!token) {
-        window.location.href = '/login.html';
-        return false;
-    }
-    return true;
-}
-
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
     // Check authentication first
@@ -49,6 +31,10 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
     
+    // Filter offers every expense category plus the income sub-types, since the
+    // table shows both kinds of row.
+    fillCategorySelect(categoryFilter, CATEGORIES.concat(INCOME_CATEGORIES), 'All Categories');
+
     loadAllExpenses();
     setupEventListeners();
 });
@@ -57,6 +43,7 @@ function setupEventListeners() {
     // Search and filter inputs
     searchInput.addEventListener('input', applyFilters);
     categoryFilter.addEventListener('change', applyFilters);
+    eventFilter.addEventListener('change', applyFilters);
     typeFilter.addEventListener('change', applyFilters);    dateStartFilter.addEventListener('change', applyFilters);
     dateEndFilter.addEventListener('change', applyFilters);
     document.getElementById('consolidate-what-toggle').addEventListener('change', handleConsolidateToggle);
@@ -130,6 +117,7 @@ async function loadAllExpenses() {
 
         allExpenses = await response.json();
         filteredExpenses = [...allExpenses];
+        populateEventFilter();
         updateSummary();
         updateTzedakah();
         sortData();
@@ -151,22 +139,25 @@ async function loadAllExpenses() {
 
 function applyFilters() {
     const searchTerm = searchInput.value.toLowerCase().trim();
-    const categoryValue = categoryFilter.value.toLowerCase();
+    const categoryValue = categoryFilter.value;
+    const eventValue = eventFilter.value;
     const typeValue = typeFilter.value;
     const startDate = dateStartFilter.value;
     const endDate = dateEndFilter.value;
-    
+
     filteredExpenses = allExpenses.filter(expense => {
         // Search filter
-        const matchesSearch = !searchTerm || 
-            expense.what.toLowerCase().includes(searchTerm) ||
-            expense.notes.toLowerCase().includes(searchTerm) ||
+        const matchesSearch = !searchTerm ||
+            (expense.what || '').toLowerCase().includes(searchTerm) ||
+            (expense.merchant || '').toLowerCase().includes(searchTerm) ||
+            (expense.event || '').toLowerCase().includes(searchTerm) ||
             expense.category.toLowerCase().includes(searchTerm);
-        
-        // Category filter
-        const matchesCategory = !categoryValue || 
-            expense.category.toLowerCase() === categoryValue;
-        
+
+        // Category filter - values are display labels, compare exactly
+        const matchesCategory = !categoryValue || expense.category === categoryValue;
+
+        const matchesEvent = !eventValue || expense.event === eventValue;
+
         // Type filter
         const matchesType = !typeValue || 
             (typeValue === 'expense' && !expense.is_positive) ||
@@ -186,7 +177,7 @@ function applyFilters() {
                 const end = new Date(endDate + 'T12:00:00');
                 if (expenseDate > end) matchesDateRange = false;
             }
-        }return matchesSearch && matchesCategory && matchesType && matchesDateRange;
+        }return matchesSearch && matchesCategory && matchesEvent && matchesType && matchesDateRange;
     });
     
     // Apply consolidation based on which toggle is checked
@@ -196,7 +187,7 @@ function applyFilters() {
     if (consolidateWhatToggle.checked) {
         filteredExpenses = consolidateExpenses(filteredExpenses, 'what');
     } else if (consolidateNotesToggle.checked) {
-        filteredExpenses = consolidateExpenses(filteredExpenses, 'notes');
+        filteredExpenses = consolidateExpenses(filteredExpenses, 'merchant');
     }
     
     updateSummary();
@@ -268,7 +259,8 @@ function renderTable() {
                 <td class="${amountClass}">${amountPrefix}$${amount.toFixed(2)}</td>
                 <td><span class="category-tag">${expense.category}</span></td>
                 <td>${expense.what}</td>
-                <td>${expense.notes || '-'}</td>
+                <td>${expense.merchant || '-'}</td>
+                <td>${expense.event || '-'}</td>
                 <td>
                     <button class="delete-action" onclick="deleteExpense(${expense.id})" title="Delete">
                         🗑️
@@ -309,7 +301,7 @@ function updateTzedakah() {
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     const v2Tzedakah = allExpenses
-        .filter(e => e.is_positive === 0 && e.category === 'tzedakah' && e.version === 2)
+        .filter(e => e.is_positive === 0 && e.category === 'Tzedakah' && e.version === 2)
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     const owed = v2Income * 0.10;
@@ -362,7 +354,7 @@ function exportToCSV() {
     }
     
     // Create CSV content
-    const headers = ['Date', 'Amount', 'Type', 'Category', 'Description', 'Notes'];
+    const headers = ['Date', 'Amount', 'Type', 'Category', 'Description', 'Merchant', 'Event'];
     const csvContent = [
         headers.join(','),        ...filteredExpenses.map(expense => {
             const amount = Math.abs(expense.amount);
@@ -375,7 +367,8 @@ function exportToCSV() {
                 `"${type}"`,
                 `"${expense.category}"`,
                 `"${expense.what.replace(/"/g, '""')}"`,
-                `"${(expense.notes || '').replace(/"/g, '""')}"`
+                `"${(expense.merchant || '').replace(/"/g, '""')}"`,
+                `"${(expense.event || '').replace(/"/g, '""')}"`
             ].join(',');
         })
     ].join('\n');
@@ -419,10 +412,18 @@ function populateLineCategoryDropdown() {
     categorySelect.innerHTML = '<option value="all">All Categories</option>';
     
     categories.forEach(category => {
-        const option = document.createElement('option');
-        option.value = category;
-        option.textContent = category.charAt(0).toUpperCase() + category.slice(1);
-        categorySelect.appendChild(option);
+        categorySelect.appendChild(new Option(category, category));
+    });
+}
+
+// Events are free text, so the options come from the data rather than a list.
+function populateEventFilter() {
+    const events = [...new Set(allExpenses.map(expense => expense.event).filter(Boolean))].sort();
+
+    eventFilter.innerHTML = '<option value="">All Events</option>';
+
+    events.forEach(event => {
+        eventFilter.appendChild(new Option(event, event));
     });
 }
 
@@ -613,14 +614,15 @@ function getBarChartData(range) {
     const sortedEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
     
     return {
-        labels: sortedEntries.map(([category]) => category.charAt(0).toUpperCase() + category.slice(1)),
+        labels: sortedEntries.map(([category]) => category),
         data: sortedEntries.map(([, amount]) => amount)
     };
 }
 
 function updateLineChart() {
     const category = document.getElementById('line-chart-category').value;
-    const period = document.getElementById('line-chart-period').value;
+    const periodSelect = document.getElementById('line-chart-period');
+    const period = periodSelect.value;
     const range = document.getElementById('line-chart-range').value;
     
     // Calculate date range based on dropdown selection
@@ -657,7 +659,7 @@ function updateLineChart() {
     
     trendLineChart.data.labels = chartData.labels;
     trendLineChart.data.datasets[0].data = chartData.data;
-    trendLineChart.data.datasets[0].label = `${period.charAt(0).toUpperCase() + period.slice(1)} Expenses${category !== 'all' ? ` - ${category}` : ''}`;
+    trendLineChart.data.datasets[0].label = `${periodSelect.selectedOptions[0].text} Expenses${category !== 'all' ? ` - ${category}` : ''}`;
     trendLineChart.update();
 }
 
@@ -755,7 +757,7 @@ function formatPeriodLabel(key, period) {
 
 function filterTableByCategory(category) {
     // Set category filter
-    document.getElementById('category-filter').value = category.toLowerCase();
+    document.getElementById('category-filter').value = category;
     
     // Apply the current bar chart date range to the table filters
     const range = document.getElementById('bar-chart-range').value;
@@ -817,12 +819,12 @@ let parsedImportData = [];
 
 function downloadSampleCSV() {
     const sampleData = [
-        ['Date', 'Amount', 'Category', 'What', 'Notes', 'Is Income', 'Is Taxable'],
-        ['2025-01-15', '50.25', 'food', 'Grocery shopping', 'Weekly groceries', 'false', 'false'],
-        ['2025-01-16', '12.50', 'restaurant', 'Lunch', 'Business lunch', '', 'false'],
-        ['2025-01-17', '75.00', 'travel', 'Gas', 'Road trip fuel', 'false', 'false'],
-        ['2025-01-20', '2500.00', 'work', 'Paycheck', 'Bi-weekly salary', 'true', 'true'],
-        ['2025-01-22', '150.00', 'gift', 'Birthday money', '', 'true', 'false']
+        ['Date', 'Amount', 'Category', 'Description', 'Merchant', 'Event', 'Is Income', 'Is Taxable'],
+        ['2025-01-15', '50.25', 'Groceries', 'Grocery shopping', 'trader joes', '', 'false', 'false'],
+        ['2025-01-16', '12.50', 'Restaurants & Takeout', 'Lunch', 'chocolatte', '', '', 'false'],
+        ['2025-01-17', '75.00', 'Car', 'Gas', 'shell', 'florida trip', 'false', 'false'],
+        ['2025-01-20', '2500.00', 'work', 'Paycheck', '', '', 'true', 'true'],
+        ['2025-01-22', '150.00', 'gift', 'Birthday money', '', '', 'true', 'false']
     ];
 
     const csvContent = sampleData.map(row => 
@@ -895,15 +897,16 @@ function parseCSV(csvText) {
         return;
     }
 
-    // Parse header
+    // Parse header. The description column is headed "Description" on an export
+    // and "What" on older files - either satisfies the requirement.
     const headers = parseCSVLine(lines[0]);
-    const requiredHeaders = ['Date', 'Amount', 'Category', 'What'];
-    const missingHeaders = requiredHeaders.filter(header => 
-        !headers.some(h => h.toLowerCase().includes(header.toLowerCase()))
+    const requiredHeaders = [['date'], ['amount'], ['category'], ['description', 'what']];
+    const missingHeaders = requiredHeaders.filter(names =>
+        !headers.some(h => names.some(n => h.toLowerCase().includes(n)))
     );
 
     if (missingHeaders.length > 0) {
-        alert(`Missing required columns: ${missingHeaders.join(', ')}`);
+        alert(`Missing required columns: ${missingHeaders.map(n => n[0]).join(', ')}`);
         return;
     }
 
@@ -915,9 +918,14 @@ function parseCSV(csvText) {
         else if (cleanHeader.includes('amount')) headerMap.amount = index;
         else if (cleanHeader.includes('category')) headerMap.category = index;
         else if (cleanHeader.includes('what') || cleanHeader.includes('description')) headerMap.what = index;
-        else if (cleanHeader.includes('notes')) headerMap.notes = index;
+        // `notes` is the pre-v3 name for the same column, kept so an old export
+        // still imports.
+        else if (cleanHeader.includes('merchant') || cleanHeader.includes('notes')) headerMap.merchant = index;
+        else if (cleanHeader.includes('event')) headerMap.event = index;
         else if (cleanHeader.includes('taxable')) headerMap.is_taxable = index;
-        else if (cleanHeader.includes('income')) headerMap.is_income = index;
+        // An export heads this column "Type" and fills it Income/Expense; the
+        // sample heads it "Is Income" and fills it true/false. Both land here.
+        else if (cleanHeader.includes('income') || cleanHeader === 'type') headerMap.is_income = index;
     });
 
     // Parse data rows
@@ -992,18 +1000,22 @@ function parseExpenseRow(row, headerMap, rowNumber) {
     const isIncomeStr = headerMap.is_income !== undefined
         ? row[headerMap.is_income]?.trim()?.toLowerCase()
         : '';
-    const isPositive = isIncomeStr === 'true' || isIncomeStr === '1';
+    const isPositive = isIncomeStr === 'true' || isIncomeStr === '1' || isIncomeStr === 'income';
 
     // Parse category
     const category = row[headerMap.category]?.trim();
     if (!category) throw new Error('Category is required');
+    if (!CATEGORIES.includes(category) && !INCOME_CATEGORIES.includes(category)) {
+        throw new Error(`Unknown category "${category}"`);
+    }
 
     // Parse what
     const what = row[headerMap.what]?.trim();
     if (!what) throw new Error('What/Description is required');
 
     // Parse optional fields
-    const notes = row[headerMap.notes]?.trim() || '';
+    const merchant = row[headerMap.merchant]?.trim() || '';
+    const event = row[headerMap.event]?.trim() || '';
     const isTaxableStr = row[headerMap.is_taxable]?.trim()?.toLowerCase();
     const isTaxable = isTaxableStr === 'true' || isTaxableStr === '1';
 
@@ -1013,7 +1025,8 @@ function parseExpenseRow(row, headerMap, rowNumber) {
         expense_date: date.toISOString().split('T')[0],
         category: category,
         what: what,
-        notes: notes,
+        merchant: merchant,
+        event: event,
         is_taxable: isTaxable
     };
 }
@@ -1027,7 +1040,7 @@ function showImportPreview() {
     const preview = parsedImportData.slice(0, 5);
     const previewHtml = preview.map(expense => {
         const sign = expense.is_positive ? '+' : '-';
-        return `${expense.expense_date} | ${sign}$${expense.amount.toFixed(2)} | ${expense.category} | ${expense.what} | ${expense.notes}`;
+        return `${expense.expense_date} | ${sign}$${expense.amount.toFixed(2)} | ${expense.category} | ${expense.what} | ${expense.merchant}${expense.event ? ` | ${expense.event}` : ''}`;
     }).join('\n');
 
     previewTable.textContent = previewHtml;
@@ -1111,19 +1124,11 @@ function consolidateExpenses(expenses, consolidateBy) {
     const consolidated = {};
     
     expenses.forEach(expense => {
-        // Create a key based on normalized category and the specified field (what or notes)
-        // This helps combine spelling variations by removing spaces, apostrophes, etc.
-        let key;
-        if (consolidateBy === 'what') {
-            const normalizedCategory = normalizeText(expense.category);
-            const normalizedWhat = normalizeText(expense.what);
-            key = `${normalizedCategory}|${normalizedWhat}`;
-        } else if (consolidateBy === 'notes') {
-            const normalizedCategory = normalizeText(expense.category);
-            const normalizedNotes = normalizeText(expense.notes);
-            key = `${normalizedCategory}|${normalizedNotes}`;
-        }
-        
+        // Key on normalized category + the chosen field (what or merchant), so
+        // spelling variations - spaces, apostrophes - collapse together.
+        const key = `${normalizeText(expense.category)}|${normalizeText(expense[consolidateBy])}`;
+
+
         if (consolidated[key]) {
             // Add to existing consolidated expense
             consolidated[key].amount += expense.amount;
@@ -1133,19 +1138,11 @@ function consolidateExpenses(expenses, consolidateBy) {
             if (expenseDate && consolidatedDate && expenseDate > consolidatedDate) {
                 consolidated[key].expense_date = expense.expense_date;
             }
-            // Append to the other field to show it's consolidated
-            if (consolidateBy === 'what') {
-                // Consolidating by what, so append to notes
-                const currentNotes = consolidated[key].notes || '';
-                if (!currentNotes.includes(' (consolidated)')) {
-                    consolidated[key].notes = currentNotes + ' (consolidated)';
-                }
-            } else {
-                // Consolidating by notes, so append to what
-                const currentWhat = consolidated[key].what || '';
-                if (!currentWhat.includes(' (consolidated)')) {
-                    consolidated[key].what = currentWhat + ' (consolidated)';
-                }
+            // Mark the other field so the row reads as a rollup
+            const other = consolidateBy === 'what' ? 'merchant' : 'what';
+            const current = consolidated[key][other] || '';
+            if (!current.includes(' (consolidated)')) {
+                consolidated[key][other] = current + ' (consolidated)';
             }
         } else {
             // Create new consolidated entry

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget - Expense Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .yearly-badge {
+            margin-left: 6px;
+            font-size: 0.75rem;
+            color: #a8b3cf;
+        }
+
+        .goal-input {
+            width: 100px;
+            padding: 6px 8px;
+            border: 2px solid #374151;
+            border-radius: 6px;
+            background-color: #111827;
+            color: #e6e8eb;
+            font-size: 0.9rem;
+        }
+
+        .goal-input:focus {
+            outline: none;
+            border-color: #67e8f9;
+        }
+
+        .under { color: #22c55e; font-weight: 600; }
+        .over  { color: #ef4444; font-weight: 600; }
+
+        tfoot td {
+            font-weight: 700;
+            border-top: 2px solid #2a3441;
+        }
+    </style>
+</head>
+<body>
+    <div class="container full-width">
+        <nav class="tab-nav">
+            <a href="/">Home</a>
+            <a href="/budget.html">Budget</a>
+            <a href="/all-expenses.html">Expenses</a>
+        </nav>
+
+        <header class="flex">
+            <h1>🎯 Budget</h1>
+            <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
+        </header>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="month">Month:</label>
+                <input type="month" id="month">
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Goal</th>
+                        <th>Actual</th>
+                        <th>Difference</th>
+                        <th>Set Goal</th>
+                    </tr>
+                </thead>
+                <tbody id="budget-tbody"></tbody>
+                <tfoot id="budget-tfoot"></tfoot>
+            </table>
+        </div>
+
+        <div id="loading" class="loading">Loading budget...</div>
+    </div>
+
+    <script src="categories.js"></script>
+    <script src="auth.js"></script>
+    <script src="budget.js"></script>
+</body>
+</html>

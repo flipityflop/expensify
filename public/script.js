@@ -8,35 +8,18 @@ const dateInput = document.getElementById('expense-date');
 const holdDateCheckbox = document.getElementById('hold-date');
 const categorySelect = document.getElementById('category');
 const whatInput = document.getElementById('what');
-const notesInput = document.getElementById('notes');
+const merchantInput = document.getElementById('merchant');
 const eventInput = document.getElementById('event');
 const messageDiv = document.getElementById('message');
 const expensesList = document.getElementById('expenses-list');
 
 // Autocomplete elements
 const whatSuggestions = document.getElementById('what-suggestions');
-const notesSuggestions = document.getElementById('notes-suggestions');
-const notesChips = document.getElementById('notes-chips');
+const merchantSuggestions = document.getElementById('merchant-suggestions');
+const merchantChips = document.getElementById('merchant-chips');
 const eventSuggestions = document.getElementById('event-suggestions');
 
-// Authentication helpers
-function getAuthToken() {
-    return localStorage.getItem('authToken');
-}
-
-function getAuthHeaders() {
-    const token = getAuthToken();
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-}
-
-function checkAuth() {
-    const token = getAuthToken();
-    if (!token) {
-        window.location.href = '/login.html';
-        return false;
-    }
-    return true;
-}
+// getAuthToken / getAuthHeaders / checkAuth / logout come from auth.js
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
@@ -71,19 +54,20 @@ function setupEventListeners() {
     expenseBtn.addEventListener('click', () => setExpenseType(false));
     incomeBtn.addEventListener('click', () => setExpenseType(true));
     
-    // Autocomplete for "what" field
+    // Autocomplete for "description" field
     whatInput.addEventListener('input', () => handleAutocomplete(whatInput, whatSuggestions, 'what'));
-    whatInput.addEventListener('blur', () => {
-        setTimeout(() => hideSuggestions(whatSuggestions), 200);
-        // Fetch notes suggestions when user leaves "what" field
-        fetchNotesSuggestions(whatInput.value.trim());
+    whatInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(whatSuggestions), 200));
+
+    // Merchant chips are scoped to the chosen category - that is the whole
+    // point of the split, so they follow the category, not the description.
+    categorySelect.addEventListener('change', () => fetchMerchantChips(categorySelect.value));
+
+    // Autocomplete for "merchant" field, as a fallback for anything not on a chip
+    merchantInput.addEventListener('input', () => {
+        clearChipSelection();
+        handleAutocomplete(merchantInput, merchantSuggestions, 'merchant');
     });
-    // Also fetch suggestions when user selects from autocomplete
-    whatInput.addEventListener('change', () => fetchNotesSuggestions(whatInput.value.trim()));
-    
-    // Autocomplete for "notes" field
-    notesInput.addEventListener('input', () => handleAutocomplete(notesInput, notesSuggestions, 'notes'));
-    notesInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(notesSuggestions), 200));
+    merchantInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(merchantSuggestions), 200));
 
     // Autocomplete for "event" field (same as "what" field)
     eventInput.addEventListener('input', () => handleAutocomplete(eventInput, eventSuggestions, 'event'));
@@ -94,70 +78,26 @@ function setupEventListeners() {
 }
 
 function setExpenseType(isIncome) {
-    const notesGroup = document.getElementById('notes-group');
+    const merchantGroup = document.getElementById('merchant-group');
     const eventGroup = document.getElementById('event-group');
     const taxableGroup = document.getElementById('taxable-group');
 
-    if (isIncome) {
-        // Set to income
-        isPositiveInput.value = '1';
-        incomeBtn.classList.add('active');
-        expenseBtn.classList.remove('active');
+    isPositiveInput.value = isIncome ? '1' : '0';
+    incomeBtn.classList.toggle('active', isIncome);
+    expenseBtn.classList.toggle('active', !isIncome);
 
-        // Hide notes and event sections, show taxable checkbox
-        notesGroup.style.display = 'none';
-        eventGroup.style.display = 'none';
-        taxableGroup.style.display = 'block';
+    // Merchant and event are expense-only; income gets the taxable checkbox.
+    merchantGroup.style.display = isIncome ? 'none' : 'block';
+    eventGroup.style.display = isIncome ? 'none' : 'block';
+    taxableGroup.style.display = isIncome ? 'block' : 'none';
 
-        // Update category options for income
-        updateCategoryOptions(true);
-    } else {
-        // Set to expense
-        isPositiveInput.value = '0';
-        expenseBtn.classList.add('active');
-        incomeBtn.classList.remove('active');
-
-        // Show notes and event sections, hide taxable checkbox
-        notesGroup.style.display = 'block';
-        eventGroup.style.display = 'block';
-        taxableGroup.style.display = 'none';
-
-        // Update category options for expenses
-        updateCategoryOptions(false);
-    }
+    updateCategoryOptions(isIncome);
+    merchantChips.innerHTML = '';
 }
 
 function updateCategoryOptions(isIncome) {
-    const categorySelect = document.getElementById('category');
-    categorySelect.innerHTML = '<option value="">Select category...</option>';
-      if (isIncome) {
-        // Income categories
-        const incomeCategories = [
-            'work', 'sidejob', 'gift', 'investment', 'other'
-        ];
-        
-        incomeCategories.forEach(category => {
-            const option = document.createElement('option');
-            option.value = category;
-            option.textContent = category.charAt(0).toUpperCase() + category.slice(1);
-            categorySelect.appendChild(option);
-        });
-    } else {
-        // Expense categories
-        const expenseCategories = [
-            'kitchen / home', 'investments', 'office work', 'subscriptions',
-            'electronics personal', 'clothes + accessories', 'travel', 'food',
-            'various/ debt repayment', 'fun', 'rent+bills', 'gifts', 'health', 'beauty',
-            'restaurant', 'tzedakah'
-        ];
-        
-        expenseCategories.forEach(category => {
-            const option = document.createElement('option');
-            option.value = category;
-            option.textContent = category.charAt(0).toUpperCase() + category.slice(1);
-            categorySelect.appendChild(option);
-        });
-    }
+    const list = isIncome ? INCOME_CATEGORIES : CATEGORIES;
+    fillCategorySelect(categorySelect, list, 'Select category...');
 }
 
 function changeDate(days) {
@@ -175,12 +115,20 @@ async function handleFormSubmit(e) {
         expense_date: formData.get('expense_date'),
         category: formData.get('category'),
         what: formData.get('what').trim(),
-        notes: formData.get('notes') ? formData.get('notes').trim() : '',
+        merchant: formData.get('merchant') ? formData.get('merchant').trim() : '',
         event: formData.get('event') ? formData.get('event').trim() : '',
         is_taxable: formData.get('is_taxable') === '1'
     };
-    
-    try {        const response = await fetch('/api/expenses', {
+
+    try {
+        const resolved = await resolveEvent(expenseData.event);
+        if (resolved === null) {          // user declined to create a new event
+            eventInput.focus();
+            return;
+        }
+        expenseData.event = resolved;
+
+        const response = await fetch('/api/expenses', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -213,8 +161,8 @@ async function handleFormSubmit(e) {
             // Reset taxable checkbox
             document.getElementById('is-taxable').checked = false;
 
-            // Clear notes suggestion chips
-            notesChips.innerHTML = '';
+            // Clear merchant suggestion chips
+            merchantChips.innerHTML = '';
 
             // Reload expenses
             loadExpenses();
@@ -265,10 +213,6 @@ function showSuggestions(suggestionsDiv, suggestions, input) {
         item.addEventListener('click', () => {
             input.value = suggestion;
             hideSuggestions(suggestionsDiv);
-            // If this is the "what" field, fetch notes suggestions
-            if (input === whatInput) {
-                fetchNotesSuggestions(suggestion);
-            }
             input.focus();
         });
 
@@ -282,47 +226,55 @@ function hideSuggestions(suggestionsDiv) {
     suggestionsDiv.style.display = 'none';
 }
 
-// Fetch and display notes suggestions as chips based on "what" field
-async function fetchNotesSuggestions(whatValue) {
-    if (!whatValue) {
-        notesChips.innerHTML = '';
-        return;
-    }
+// The merchants most used in this category, as tappable chips.
+async function fetchMerchantChips(category) {
+    merchantChips.innerHTML = '';
+    if (!category) return;
 
     try {
-        const url = `/api/suggestions/notes-by-what?what=${encodeURIComponent(whatValue)}`;
-        const response = await fetch(url, {
-            headers: getAuthHeaders()
-        });
-        const suggestions = await response.json();
+        const url = `/api/merchants-by-category?category=${encodeURIComponent(category)}`;
+        const response = await fetch(url, { headers: getAuthHeaders() });
+        const merchants = await response.json();
 
-        if (suggestions.length > 0) {
-            displayNotesChips(suggestions);
-        } else {
-            notesChips.innerHTML = '';
-        }
+        merchants.forEach(merchant => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'suggestion-chip';
+            chip.textContent = merchant;
+
+            chip.addEventListener('click', () => {
+                merchantInput.value = merchant;
+                clearChipSelection();
+                chip.classList.add('selected');
+            });
+
+            merchantChips.appendChild(chip);
+        });
     } catch (error) {
-        console.error('Notes suggestions error:', error);
-        notesChips.innerHTML = '';
+        console.error('Merchant chips error:', error);
     }
 }
 
-function displayNotesChips(suggestions) {
-    notesChips.innerHTML = '';
+function clearChipSelection() {
+    merchantChips.querySelectorAll('.selected').forEach(c => c.classList.remove('selected'));
+}
 
-    suggestions.forEach(suggestion => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'suggestion-chip';
-        chip.textContent = suggestion;
+// Event is the one field where free text must not quietly create near-duplicates
+// ("israel trip" vs "Israel Trip" vs "israel"). An existing spelling wins; a
+// genuinely new event needs an explicit yes.
+// Returns the value to save, or null if the user backed out.
+async function resolveEvent(value) {
+    if (!value) return '';
 
-        chip.addEventListener('click', () => {
-            notesInput.value = suggestion;
-            notesInput.focus();
-        });
-
-        notesChips.appendChild(chip);
+    const response = await fetch(`/api/autocomplete/event?q=${encodeURIComponent(value)}`, {
+        headers: getAuthHeaders()
     });
+    const existing = await response.json();
+
+    const match = existing.find(e => e.toLowerCase() === value.toLowerCase());
+    if (match) return match;
+
+    return confirm(`"${value}" is not an existing event. Create it as a new one?`) ? value : null;
 }
 
 async function loadExpenses() {
@@ -369,7 +321,8 @@ function createExpenseHTML(expense) {
                 <span class="expense-category">${expense.category}</span>
                 <span class="expense-separator">•</span>
                 <span class="expense-date">${expenseDate}</span>
-                ${expense.notes ? `<span class="expense-separator">•</span><span class="expense-notes">${expense.notes}</span>` : ''}
+                ${expense.merchant ? `<span class="expense-separator">•</span><span class="expense-merchant">${expense.merchant}</span>` : ''}
+                ${expense.event ? `<span class="expense-separator">•</span><span class="expense-event">${expense.event}</span>` : ''}
             </div>
         </div>
     `;
@@ -406,11 +359,6 @@ function showMessage(text, type) {
     setTimeout(() => {
         messageDiv.style.display = 'none';
     }, 3000);
-}
-
-function logout() {
-    localStorage.removeItem('authToken');
-    window.location.href = '/login.html';
 }
 
 // Keyboard shortcuts
@@ -458,7 +406,6 @@ function safeFormatDate(dateString) {
     }
 }
 
-// Expose functions to global scope for HTML onclick handlers
+// Expose functions to global scope for HTML onclick handlers (logout: auth.js)
 window.changeDate = changeDate;
 window.deleteExpense = deleteExpense;
-window.logout = logout;
