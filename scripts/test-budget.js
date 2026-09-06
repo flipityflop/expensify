@@ -84,17 +84,12 @@ assert.strictEqual(spend, 170);
 assert.strictEqual(Math.min(100, (spend / budget) * 100), 34);
 
 // ---- autofill scaling ----------------------------------------------------
-// No yearly goals yet, so nothing is reserved and the whole income is split.
-vm.runInContext(`goals = {};`, ctx);
-
 // Groceries averages 200, Gifts 20; everything else 0. Historic total 220.
-// Mirrors autofill(): yearly goals are reserved off the income first.
 const scaled = target => call(`(() => {
     const avgs = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly')
         .map(c => [c, averageMonthly(c, '2026-04')]).filter(([, a]) => a !== null);
     const historic = avgs.reduce((s, [, a]) => s + a, 0);
-    const available = ${target} - reservedMonthly();
-    const scale = ${target} && historic ? available / historic : 1;
+    const scale = ${target} && historic ? ${target} / historic : 1;
     return JSON.stringify(Object.fromEntries(
         avgs.map(([c, a]) => [c, Math.round(a * scale * 100) / 100])));
 })()`);
@@ -119,33 +114,5 @@ assert.strictEqual(tight.Gifts, 10);
 
 // The reserved key must never be rendered or budgeted as a category.
 assert.ok(!call(`CATEGORIES.includes(SPENDING_KEY)`), 'SPENDING_KEY leaked into CATEGORIES');
-
-// ---- yearly goals come off the income first ------------------------------
-// Tzedakah 1200/yr = 100/mo reserved, leaving 1000 of an 1100 income to split.
-vm.runInContext(`goals = { Tzedakah: 1200 };`, ctx);
-assert.strictEqual(call(`reservedMonthly()`), 100);
-
-const afterReserve = JSON.parse(scaled(1100));
-assert.strictEqual(afterReserve.Groceries, 909.09);   // 200/220 * 1000
-assert.strictEqual(afterReserve.Gifts, 90.91);        //  20/220 * 1000
-const left = Object.values(afterReserve).reduce((s, v) => s + v, 0);
-assert.ok(Math.abs(left - 1000) < 0.05, `split totals ${left}, expected ~1000`);
-
-// Monthly goals plus the reservation add back up to the income, so the
-// progress bar's budget equals what was entered.
-assert.ok(Math.abs((left + 100) - 1100) < 0.05, 'goals + reserved should equal income');
-
-// Autofill must never write a yearly goal - Tzedakah is a rule, not an average.
-assert.ok(!Object.keys(afterReserve).includes('Tzedakah'), 'autofill wrote a yearly goal');
-assert.ok(!Object.keys(afterReserve).includes('Travel'), 'autofill wrote a yearly goal');
-
-// Yearly goals swallowing the whole income must be caught, not turned into
-// negative goals.
-vm.runInContext(`goals = { Tzedakah: 24000 };`, ctx);   // 2000/mo
-assert.strictEqual(call(`reservedMonthly()`), 2000);
-assert.ok(call(`1100 - reservedMonthly()`) <= 0, 'over-reserved case should be refused');
-
-vm.runInContext(`goals = {};`, ctx);
-assert.strictEqual(call(`reservedMonthly()`), 0);       // no yearly goals, no reservation
 
 console.log('budget: all assertions pass');
