@@ -173,7 +173,9 @@ function renderProgress(month, label) {
         .filter(e => !e.is_positive && e.expense_date.startsWith(month))
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    progressLabel.textContent = `Total spend — ${label}`;
+    const reserved = reservedMonthly();
+    progressLabel.textContent = `Total spend — ${label}`
+        + (reserved ? ` (incl. ${money(reserved)}/mo toward yearly goals)` : '');
     progressFigures.textContent = budget
         ? `${money(spend)} of ${money(budget)}`
         : `${money(spend)} — no goals set yet`;
@@ -209,11 +211,22 @@ async function saveGoal(category, value) {
     }
 }
 
-// Past averages give the shape, the income figure gives the scale: each goal is
-// its share of historical spending, applied to whatever is being put towards
-// spending this month. With no income set, the raw averages are used as-is.
+// A yearly goal is still money leaving every month, so a twelfth of each comes
+// off the income before anything is split. Tzedakah at $20,000 a year is
+// $1,666.67 a month - ignoring it would size every other category against
+// income that is already spoken for.
+function reservedMonthly() {
+    return CATEGORIES
+        .filter(c => goalPeriod(c) === 'yearly')
+        .reduce((sum, c) => sum + (goals[c] || 0) / 12, 0);
+}
+
+// Past averages give the shape, the income left after the yearly reservation
+// gives the scale. With no income set, the raw averages are used as-is.
 //
-// Yearly goals are left out: a twelve-month total is not an average of months.
+// Yearly goals are never written by autofill: they are deliberate targets
+// (maaser is a rule, not an average), so overwriting them with past spending
+// would be wrong.
 async function autofill() {
     const month = monthInput.value;
     const averages = CATEGORIES
@@ -227,13 +240,24 @@ async function autofill() {
 
     const historic = averages.reduce((sum, [, avg]) => sum + avg, 0);
     const target = goals[SPENDING_KEY];
+    const reserved = reservedMonthly();
+    const available = target - reserved;
+
+    if (target && available <= 0) {
+        return alert(
+            `Yearly goals reserve ${money(reserved)} a month, which is all of the ${money(target)} income.`
+            + `\n\nRaise the income or lower the yearly goals.`
+        );
+    }
+
     // Guard the divisor: with no prior spending there are no proportions to
     // scale, and every goal would come out NaN.
-    const scale = target && historic ? target / historic : 1;
+    const scale = target && historic ? available / historic : 1;
 
     const question = scale === 1
         ? `Overwrite ${averages.length} monthly goals with the average spend before ${month}?`
-        : `Split ${money(target)} across ${averages.length} monthly goals, in proportion to spending before ${month}?`
+        : `Split ${money(available)} across ${averages.length} monthly goals, in proportion to spending before ${month}?`
+          + (reserved ? `\n\n${money(target)} income less ${money(reserved)}/mo reserved for yearly goals.` : '')
           + `\n\nAverages total ${money(historic)}, so every goal is scaled by ${scale.toFixed(2)}x.`;
     if (!confirm(question)) return;
 
