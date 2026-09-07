@@ -86,7 +86,7 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 Defined once in `public/categories.js` — the browser pages and the migration
 scripts both read that file. Add a category there and nowhere else.
 
-**Expense** (21): Groceries, Household Supplies, Restaurants & Takeout, Transportation, Car, Home & Furnishing, Household Help, Clothing & Accessories, Beauty & Wigs, Rent, Bills & Insurance, Health, Fitness, Tzedakah, Gifts, Fun & Entertainment, Travel, Subscriptions & Software, Work Expenses, Shopping & Other, Debt, Fees & Taxes
+**Expense** (22): Groceries, Household Supplies, Restaurants & Takeout, Transportation, Car, Home & Furnishing, Household Help, Clothing & Accessories, Beauty & Wigs, Rent, Bills & Insurance, Health, Fitness, Tzedakah, Judaism, Gifts, Fun & Entertainment, Travel, Subscriptions & Software, Work Expenses, Shopping & Other, Debt, Fees & Taxes
 
 **Income**: work, sidejob, gift, investment, other
 

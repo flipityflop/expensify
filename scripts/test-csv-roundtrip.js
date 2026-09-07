@@ -83,7 +83,7 @@ assert.strictEqual(old.alert, null, `legacy header rejected: ${old.alert}`);
 assert.strictEqual(old.rows[0].merchant, 'chocolatte', 'legacy Notes column maps to merchant');
 assert.strictEqual(old.rows[0].is_positive, false);
 
-// ---- a category outside the 21 is rejected, not silently stored ----------
+// ---- a category off the shipped list is rejected, not silently stored ----
 const bad = importCsv([
     '"Date","Amount","Category","Description"',
     '"2025-01-15","10.00","kitchen / home","Something"'

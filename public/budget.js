@@ -18,7 +18,7 @@ let fixed = {}; // category -> true when the goal is a fixed cost, set by hand
 // How much income is being put towards spending each month. Stored as one
 // reserved row in budget_goals rather than its own table: that table is
 // already category -> amount with an upsert route, and the leading
-// underscores keep it out of the 21 real categories the page renders.
+// underscores keep it out of the real categories the page renders.
 const SPENDING_KEY = '__spending_budget__';
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -169,7 +169,7 @@ function render() {
     renderProgress(month, label);
 }
 
-// One bar for all 21 categories, everything put on a monthly footing: a yearly
+// One bar for every category, everything put on a monthly footing: a yearly
 // goal counts at a twelfth, against that category's spend in this month only.
 // Adding a whole year's Travel to one month of Groceries would not mean anything.
 function renderProgress(month, label) {

@@ -4,7 +4,7 @@
 //   node scripts/migrate-v3.js --apply    # writes
 //
 // Three things change, all additive or reversible against the Phase 0 JSON dump:
-//   category  - remapped onto the 21-item list in public/categories.js
+//   category  - remapped onto the list in public/categories.js
 //   merchant  - NEW column, derived from `notes`
 //   event     - filled in where `notes` names one of the confirmed events
 //
@@ -318,9 +318,9 @@ async function main() {
     const afterSum = after.concat(income).reduce((s, r) => s + Number(r.amount), 0);
     if (Math.abs(afterSum - beforeSum) > 0.005) problems.push(`amount sum changed: ${beforeSum} -> ${afterSum}`);
 
-    // 3: every category lands on the 21-item list.
+    // 3: every category lands on the shipped list.
     const stray = after.filter(r => !VALID.has(r.category));
-    if (stray.length) problems.push(`${stray.length} rows outside the 21 categories: ${[...new Set(stray.map(r => r.category))].join(', ')}`);
+    if (stray.length) problems.push(`${stray.length} rows outside the shipped categories: ${[...new Set(stray.map(r => r.category))].join(', ')}`);
 
     // 4: a non-empty note must end up somewhere, unless it was one of the 5
     // deliberate blanks.
@@ -342,7 +342,7 @@ async function main() {
 
     console.log('\nAssertions:');
     if (problems.length === 0) {
-        console.log('  all pass (row count, amount sum, 21 categories, no lost notes, events on list)');
+        console.log('  all pass (row count, amount sum, known categories, no lost notes, events on list)');
     } else {
         for (const p of problems) console.log(`  FAIL: ${p}`);
     }

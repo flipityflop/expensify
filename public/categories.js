@@ -28,6 +28,7 @@ const CATEGORIES = [
     'Health',
     'Fitness',
     'Tzedakah',
+    'Judaism',
     'Gifts',
     'Fun & Entertainment',
     'Travel',
