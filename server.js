@@ -53,6 +53,20 @@ const initPromise = (async () => {
     // by hand and autofill works around it, never over it. Orthogonal to
     // `period` - a goal can be fixed and yearly.
     try { await db.execute('ALTER TABLE budget_goals ADD COLUMN fixed INTEGER DEFAULT 0'); } catch (_) {}
+
+    // `total` is what was originally owed and `paid` is how much of it has been
+    // cleared, so remaining is total - paid. Storing the running total rather
+    // than a row per payment keeps this to one table; `as_of` is the date the
+    // balance is current as of, moved by every payoff.
+    await db.execute(`CREATE TABLE IF NOT EXISTS debts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        total REAL NOT NULL,
+        paid REAL NOT NULL DEFAULT 0,
+        notes TEXT,
+        as_of TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
 })();
 
 // Convert libsql Row objects to plain JS objects for JSON serialization
@@ -211,6 +225,101 @@ app.put('/api/budget-goals', requireAuth, async (req, res) => {
             args: [category, Number(amount), period === 'yearly' ? 'yearly' : 'monthly', fixed ? 1 : 0, new Date().toISOString()]
         });
         res.json({ message: 'Budget goal saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Debts
+//
+// UTC, but only ever a fallback: the page sends the date it means. A payoff
+// entered on the last evening of a month would otherwise land in the next one.
+function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+// Shared validation for the create and update routes, which take the same body.
+// Returns { error } or the argument list in column order.
+function debtFields({ name, total, paid, notes, as_of }) {
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    if (total === undefined || total === null || isNaN(Number(total)) || Number(total) <= 0) {
+        return { error: 'total must be a positive number' };
+    }
+    const paidAmount = paid === undefined || paid === null || paid === '' ? 0 : Number(paid);
+    if (isNaN(paidAmount) || paidAmount < 0) return { error: 'paid must be 0 or more' };
+    return { args: [cleanName, Number(total), Math.min(paidAmount, Number(total)), (notes || '').trim(), as_of || todayISO()] };
+}
+
+app.get('/api/debts', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM debts ORDER BY id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/debts', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = debtFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO debts (name, total, paid, notes, as_of, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Debt added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/debts/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = debtFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE debts SET name = ?, total = ?, paid = ?, notes = ?, as_of = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Debt not found' });
+        res.json({ message: 'Debt saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// A payoff adds to what has been cleared and moves the as-of date to the day of
+// the payment. Added in the statement itself rather than read-then-write, and
+// capped at the total so an overpayment cannot drive the remaining balance
+// below zero.
+app.post('/api/debts/:id/payoff', requireAuth, async (req, res) => {
+    await initPromise;
+    const amount = Number(req.body.amount);
+    if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'a positive amount is required' });
+    }
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE debts SET paid = MIN(total, paid + ?), as_of = ?, updated_at = ? WHERE id = ?',
+            args: [amount, req.body.date || todayISO(), new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Debt not found' });
+        res.json({ message: 'Payoff recorded' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/debts/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM debts WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Debt not found' });
+        res.json({ message: 'Debt deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

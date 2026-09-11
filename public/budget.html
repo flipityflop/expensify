@@ -65,7 +65,7 @@
         /* .progress-bar / .progress-fill come from style.css (green gradient). */
         .progress-fill.over { background: linear-gradient(135deg, #ef4444, #dc2626); }
 
-        .autofill-btn {
+        .autofill-btn, .debt-btn {
             margin-left: 8px;
             padding: 4px 10px;
             border: 1px solid #4b5563;
@@ -76,13 +76,106 @@
             cursor: pointer;
         }
 
-        .autofill-btn:hover { border-color: #67e8f9; color: #67e8f9; }
+        .autofill-btn:hover, .debt-btn:hover { border-color: #67e8f9; color: #67e8f9; }
         .autofill-btn:disabled { opacity: 0.5; cursor: default; }
 
         tfoot td {
             font-weight: 700;
             border-top: 2px solid #2a3441;
         }
+
+        /* ----- Debt tracker ----- */
+
+        .debt-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 28px 0 10px;
+        }
+
+        .debt-head .section-title { margin: 0; }
+
+        .debt-row {
+            background: #1a1f2e;
+            border: 1px solid #2a3441;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+
+        .debt-row-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .debt-name { font-weight: 600; }
+
+        .debt-figures {
+            margin-left: auto;
+            color: #a8b3cf;
+            font-size: 0.9rem;
+        }
+
+        /* The bar tracks the balance still owed, so it empties as the debt is
+           paid down. Amber to keep it apart from the green spending bars. */
+        .debt-row .progress-bar {
+            height: 14px;
+            margin-bottom: 0;
+        }
+
+        .debt-fill { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        .debt-meta {
+            margin-top: 8px;
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+
+        .debt-empty {
+            color: #9ca3af;
+            font-size: 0.9rem;
+        }
+
+        #add-debt-btn { margin: 4px 0 0; }
+
+        .debt-field { margin-bottom: 14px; }
+
+        .debt-field label {
+            display: block;
+            margin-bottom: 6px;
+            color: #a8b3cf;
+            font-size: 0.85rem;
+        }
+
+        .debt-field input, .debt-field select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 2px solid #374151;
+            border-radius: 6px;
+            background-color: #111827;
+            color: #e6e8eb;
+            font-size: 0.9rem;
+        }
+
+        .debt-field input:focus, .debt-field select:focus {
+            outline: none;
+            border-color: #67e8f9;
+        }
+
+        .debt-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        #debt-delete {
+            margin-right: auto;
+            background: #7f1d1d;
+        }
+
+        #debt-delete:hover { background: #991b1b; }
     </style>
 </head>
 <body>
@@ -158,6 +251,76 @@
 
         <div id="loading" class="loading">Loading budget...</div>
 
+        <div class="debt-head">
+            <h2 class="section-title">Debt tracker</h2>
+            <button type="button" id="payoff-btn" class="debt-btn">Payoff</button>
+        </div>
+        <div id="debt-list"></div>
+        <button type="button" id="add-debt-btn" class="debt-btn">Add new debt</button>
+
+        <div id="payoff-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Payoff</h3>
+                    <span class="close" data-close="payoff-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="debt-field">
+                        <label for="payoff-debt">Debt</label>
+                        <select id="payoff-debt"></select>
+                    </div>
+                    <div class="debt-field">
+                        <label for="payoff-amount">Amount</label>
+                        <input type="number" id="payoff-amount" step="0.01" min="0">
+                    </div>
+                    <div class="debt-field">
+                        <label for="payoff-date">Date</label>
+                        <input type="date" id="payoff-date">
+                    </div>
+                    <div class="debt-actions">
+                        <button type="button" class="cancel-btn" data-close="payoff-modal">Cancel</button>
+                        <button type="button" id="payoff-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="debt-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="debt-modal-title">Add new debt</h3>
+                    <span class="close" data-close="debt-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="debt-field">
+                        <label for="debt-name">Name</label>
+                        <input type="text" id="debt-name">
+                    </div>
+                    <div class="debt-field">
+                        <label for="debt-total">Total</label>
+                        <input type="number" id="debt-total" step="0.01" min="0">
+                    </div>
+                    <div class="debt-field">
+                        <label for="debt-paid">Paid off</label>
+                        <input type="number" id="debt-paid" step="0.01" min="0">
+                    </div>
+                    <div class="debt-field">
+                        <label for="debt-as-of">As of</label>
+                        <input type="date" id="debt-as-of">
+                    </div>
+                    <div class="debt-field">
+                        <label for="debt-notes">Notes</label>
+                        <input type="text" id="debt-notes">
+                    </div>
+                    <div class="debt-actions">
+                        <button type="button" id="debt-delete" class="cancel-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="debt-modal">Cancel</button>
+                        <button type="button" id="debt-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="page-footer">
             <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
         </div>
@@ -166,5 +329,6 @@
     <script src="categories.js"></script>
     <script src="auth.js"></script>
     <script src="budget.js"></script>
+    <script src="debts.js"></script>
 </body>
 </html>

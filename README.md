@@ -56,6 +56,16 @@ CREATE TABLE budget_goals (
     period TEXT NOT NULL DEFAULT 'monthly',    -- 'monthly' | 'yearly'
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE debts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    total REAL NOT NULL,                       -- originally owed
+    paid REAL NOT NULL DEFAULT 0,              -- cleared so far; remaining = total - paid
+    notes TEXT,
+    as_of TEXT,                                -- YYYY-MM-DD the balance is current as of
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 The schema is created on cold start via `CREATE TABLE IF NOT EXISTS` in `server.js`.
@@ -80,6 +90,11 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `GET` | `/api/merchants-by-category?category=` | Top 6 merchants in a category (entry-form chips) |
 | `GET` | `/api/budget-goals` | All budget goals |
 | `PUT` | `/api/budget-goals` | Upsert one goal by category |
+| `GET` | `/api/debts` | All debts, oldest first |
+| `POST` | `/api/debts` | Add a debt |
+| `PUT` | `/api/debts/:id` | Replace a debt's name, total, paid, notes and as-of date |
+| `POST` | `/api/debts/:id/payoff` | Add to what is paid off and move the as-of date |
+| `DELETE` | `/api/debts/:id` | Delete by id |
 
 ## Categories
 
@@ -109,7 +124,9 @@ expensify-site/
 │   ├── backup.js          # Dump expenses to backups/*.json
 │   ├── restore.js         # Restore from a dump (dry-run by default)
 │   ├── migrate-v3.js      # Category remap + notes split (dry-run by default)
-│   └── test-csv-roundtrip.js
+│   ├── test-csv-roundtrip.js
+│   ├── test-budget.js
+│   └── test-debt.js
 └── public/                # Served by Express static middleware
     ├── index.html         # Main entry form
     ├── login.html
@@ -119,6 +136,7 @@ expensify-site/
     ├── auth.js            # Shared auth helpers + active-tab marking
     ├── script.js
     ├── budget.js
+    ├── debts.js           # Debt tracker section of the budget page
     ├── all-expenses.js
     └── style.css
 ```
@@ -131,7 +149,12 @@ expensify-site/
 ```bash
 node scripts/migrate-v3.js --selftest   # category/merchant mapping rules
 node scripts/test-csv-roundtrip.js      # export -> import survives a round trip
+node scripts/test-budget.js             # autofill averages + progress-bar total
+node scripts/test-debt.js               # debt remaining + bar arithmetic
 ```
+
+`npm test` runs all four. The first needs `TURSO_*` set; the other three do not
+touch the database.
 
 ## Deployment
 
