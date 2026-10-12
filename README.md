@@ -51,9 +51,10 @@ CREATE TABLE expenses (
 
 CREATE TABLE budget_goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL UNIQUE,             -- or a reserved plan key, below
     amount REAL NOT NULL,
     period TEXT NOT NULL DEFAULT 'monthly',    -- 'monthly' | 'yearly'
+    fixed INTEGER DEFAULT 0,                   -- 1 = whole goal pinned; autofill leaves it alone
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -66,7 +67,23 @@ CREATE TABLE debts (
     as_of TEXT,                                -- YYYY-MM-DD the balance is current as of
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE fixed_expenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,                    -- one of the expense categories
+    name TEXT NOT NULL,                        -- e.g. Phone, inside Bills & Insurance
+    amount REAL NOT NULL,                      -- per `frequency`
+    frequency TEXT NOT NULL DEFAULT 'monthly', -- 'monthly' | 'yearly'
+    due_day INTEGER,                           -- 1-31, null = no due date
+    due_month INTEGER,                         -- 1-12, yearly ones only
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
+
+The monthly plan on the budget page is three reserved rows in `budget_goals`,
+kept out of the category list by their leading underscores:
+`__spending_budget__` (the income - named from when it was "income to spend"),
+`__debt_payment__` and `__savings__`.
 
 The schema is created on cold start via `CREATE TABLE IF NOT EXISTS` in `server.js`.
 
@@ -95,6 +112,10 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `PUT` | `/api/debts/:id` | Replace a debt's name, total, paid, notes and as-of date |
 | `POST` | `/api/debts/:id/payoff` | Add to what is paid off and move the as-of date |
 | `DELETE` | `/api/debts/:id` | Delete by id |
+| `GET` | `/api/fixed-expenses` | All fixed expenses, by category |
+| `POST` | `/api/fixed-expenses` | Add a fixed expense |
+| `PUT` | `/api/fixed-expenses/:id` | Replace a fixed expense's category, name, amount, frequency and due date |
+| `DELETE` | `/api/fixed-expenses/:id` | Delete by id |
 
 ## Categories
 
@@ -109,7 +130,23 @@ Income is the `is_positive` toggle, not a category; the list above is the income
 sub-type, a separate dimension only reachable behind that toggle.
 
 Budget goals are monthly, except **Tzedakah** and **Travel**, which are yearly
-(`YEARLY_CATEGORIES` in `public/categories.js`).
+(`YEARLY_CATEGORIES` in `public/categories.js`). Tzedakah's year is the Jewish
+year, Rosh Hashanah (1 Tishrei) to the day before the next
+(`HEBREW_YEAR_CATEGORIES`); Travel's is January to December.
+
+## Budget page
+
+- **Monthly plan**: income, less a debt payment (card balances carried from
+  earlier months - those purchases already counted as spending when they were
+  made) and savings, is what is left for spending.
+- **Autofill** splits what is left across the monthly goals in proportion to
+  past spending. Fixed costs come off first and are never scaled: a pinned
+  category keeps its whole goal; any other category keeps its fixed expenses,
+  and only its past spending above them is scaled.
+- **Fixed expenses** live inside a category: open its row with ▸ to list, add
+  or edit them. A category's goal is raised to cover its fixed expenses when
+  one is added. Every fixed expense is also listed below the goals, soonest due
+  first.
 
 ## Project Structure
 
@@ -125,7 +162,9 @@ expensify-site/
 │   ├── restore.js         # Restore from a dump (dry-run by default)
 │   ├── migrate-v3.js      # Category remap + notes split (dry-run by default)
 │   ├── test-csv-roundtrip.js
+│   ├── test-hebrew-calendar.js
 │   ├── test-budget.js
+│   ├── test-fixed-expenses.js
 │   └── test-debt.js
 └── public/                # Served by Express static middleware
     ├── index.html         # Main entry form
@@ -133,10 +172,12 @@ expensify-site/
     ├── budget.html        # Goals vs actual, per month
     ├── all-expenses.html  # Filter / chart / export view
     ├── categories.js      # THE category list - browser and scripts both read it
+    ├── hebrew-calendar.js # Rosh Hashanah for any year, for Tzedakah's year
     ├── auth.js            # Shared auth helpers + active-tab marking
     ├── script.js
     ├── budget.js
     ├── debts.js           # Debt tracker section of the budget page
+    ├── fixed-expenses.js  # Fixed expenses: the modal, opened rows, due-date schedule
     ├── all-expenses.js
     └── style.css
 ```
@@ -149,11 +190,13 @@ expensify-site/
 ```bash
 node scripts/migrate-v3.js --selftest   # category/merchant mapping rules
 node scripts/test-csv-roundtrip.js      # export -> import survives a round trip
-node scripts/test-budget.js             # autofill averages + progress-bar total
+node scripts/test-hebrew-calendar.js    # Rosh Hashanah against published dates
+node scripts/test-budget.js             # autofill split, plan, fixed expenses, Tzedakah's year
+node scripts/test-fixed-expenses.js     # next due dates, opened rows, schedule
 node scripts/test-debt.js               # debt remaining + bar arithmetic
 ```
 
-`npm test` runs all four. The first needs `TURSO_*` set; the other three do not
+`npm test` runs all six. The first needs `TURSO_*` set; the others do not
 touch the database.
 
 ## Deployment

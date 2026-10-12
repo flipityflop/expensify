@@ -43,8 +43,12 @@ const CATEGORIES = [
 const INCOME_CATEGORIES = ['work', 'sidejob', 'gift', 'investment', 'other'];
 
 // Budget goals are monthly for everything except these two, which are lumpy
-// month to month and only make sense against a full calendar year.
+// month to month and only make sense against a full year.
 const YEARLY_CATEGORIES = ['Tzedakah', 'Travel'];
+
+// Of those, the ones whose year is the Jewish year - 1 Tishrei to the day
+// before the next - rather than January to December.
+const HEBREW_YEAR_CATEGORIES = ['Tzedakah'];
 
 function goalPeriod(category) {
     return YEARLY_CATEGORIES.includes(category) ? 'yearly' : 'monthly';
@@ -59,5 +63,5 @@ function fillCategorySelect(select, categories, placeholder) {
 }
 
 if (typeof module !== 'undefined') {
-    module.exports = { CATEGORIES, INCOME_CATEGORIES, YEARLY_CATEGORIES, goalPeriod };
+    module.exports = { CATEGORIES, INCOME_CATEGORIES, YEARLY_CATEGORIES, HEBREW_YEAR_CATEGORIES, goalPeriod };
 }

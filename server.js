@@ -3,6 +3,7 @@ const express = require('express');
 const { createClient } = require('@libsql/client');
 const cors = require('cors');
 const path = require('path');
+const { CATEGORIES } = require('./public/categories.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,6 +66,22 @@ const initPromise = (async () => {
         paid REAL NOT NULL DEFAULT 0,
         notes TEXT,
         as_of TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // A named recurring cost inside a category - Phone and Internet inside
+    // Bills & Insurance - so part of a category can be fixed without pinning
+    // the whole of it. `amount` is per `frequency`. `due_day` is the day of the
+    // month it falls due, and a yearly one also has `due_month`; both are null
+    // when it has no due date.
+    await db.execute(`CREATE TABLE IF NOT EXISTS fixed_expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        due_day INTEGER,
+        due_month INTEGER,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
 })();
@@ -320,6 +337,87 @@ app.delete('/api/debts/:id', requireAuth, async (req, res) => {
         const result = await db.execute({ sql: 'DELETE FROM debts WHERE id = ?', args: [req.params.id] });
         if (!result.rowsAffected) return res.status(404).json({ error: 'Debt not found' });
         res.json({ message: 'Debt deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Fixed expenses
+//
+// Shared validation for the create and update routes, as with debts. A
+// category outside the list would never be shown on the budget page, so it
+// is refused rather than stored out of sight.
+function isBlank(value) {
+    return value === undefined || value === null || value === '';
+}
+
+function fixedExpenseFields({ category, name, amount, frequency, due_day, due_month }) {
+    if (!CATEGORIES.includes(category)) return { error: 'category must be one of the expense categories' };
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    if (isBlank(amount) || isNaN(Number(amount)) || Number(amount) <= 0) {
+        return { error: 'amount must be a positive number' };
+    }
+    const period = frequency === 'yearly' ? 'yearly' : 'monthly';
+    const day = isBlank(due_day) ? null : Number(due_day);
+    if (day !== null && !(Number.isInteger(day) && day >= 1 && day <= 31)) {
+        return { error: 'due_day must be a day of the month, 1-31' };
+    }
+    // Only a yearly expense with a due date has a month to be due in.
+    const month = period === 'yearly' && day !== null ? Number(due_month) : null;
+    if (month !== null && !(Number.isInteger(month) && month >= 1 && month <= 12)) {
+        return { error: 'a yearly due date needs due_month, 1-12' };
+    }
+    return { args: [category, cleanName, Number(amount), period, day, month] };
+}
+
+app.get('/api/fixed-expenses', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM fixed_expenses ORDER BY category, id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/fixed-expenses', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = fixedExpenseFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO fixed_expenses (category, name, amount, frequency, due_day, due_month, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Fixed expense added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/fixed-expenses/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = fixedExpenseFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE fixed_expenses SET category = ?, name = ?, amount = ?, frequency = ?, due_day = ?, due_month = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Fixed expense not found' });
+        res.json({ message: 'Fixed expense saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/fixed-expenses/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM fixed_expenses WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Fixed expense not found' });
+        res.json({ message: 'Fixed expense deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
