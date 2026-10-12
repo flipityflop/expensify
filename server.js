@@ -84,6 +84,23 @@ const initPromise = (async () => {
         due_month INTEGER,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    // One row per credit card, its figures as of the last edit. `balance` is
+    // what is owed now and `balance_as_of` the day it was read. `apr` is a
+    // percentage (24.99), null when not known. `fee_renewal` is a date the
+    // annual fee posts on; the page rolls it forward a year at a time once it
+    // has passed.
+    await db.execute(`CREATE TABLE IF NOT EXISTS credit_cards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        balance REAL NOT NULL DEFAULT 0,
+        balance_as_of TEXT,
+        apr REAL,
+        annual_fee REAL NOT NULL DEFAULT 0,
+        fee_renewal TEXT,
+        notes TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
 })();
 
 // Convert libsql Row objects to plain JS objects for JSON serialization
@@ -418,6 +435,86 @@ app.delete('/api/fixed-expenses/:id', requireAuth, async (req, res) => {
         const result = await db.execute({ sql: 'DELETE FROM fixed_expenses WHERE id = ?', args: [req.params.id] });
         if (!result.rowsAffected) return res.status(404).json({ error: 'Fixed expense not found' });
         res.json({ message: 'Fixed expense deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Credit cards
+//
+// Shared validation for the create and update routes, as with debts. A
+// balance may be below zero - a card in credit after a refund.
+// Round-tripped rather than just parsed: Date.parse('2026-02-30') is happily
+// 2 March.
+function isDate(value) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !isNaN(parsed) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function cardFields({ name, balance, balance_as_of, apr, annual_fee, fee_renewal, notes }) {
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    const owed = isBlank(balance) ? 0 : Number(balance);
+    if (!Number.isFinite(owed)) return { error: 'balance must be a number' };
+    const rate = isBlank(apr) ? null : Number(apr);
+    if (rate !== null && !(rate >= 0 && rate <= 100)) return { error: 'apr must be a percentage, 0-100' };
+    const fee = isBlank(annual_fee) ? 0 : Number(annual_fee);
+    if (!(fee >= 0)) return { error: 'annual_fee must be 0 or more' };
+    const renewal = isBlank(fee_renewal) ? null : fee_renewal;
+    if (renewal !== null && !isDate(renewal)) return { error: 'fee_renewal must be a YYYY-MM-DD date' };
+    const asOf = isBlank(balance_as_of) ? todayISO() : balance_as_of;
+    if (!isDate(asOf)) return { error: 'balance_as_of must be a YYYY-MM-DD date' };
+    return { args: [cleanName, owed, asOf, rate, fee, renewal, (notes || '').trim()] };
+}
+
+app.get('/api/credit-cards', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM credit_cards ORDER BY id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/credit-cards', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = cardFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO credit_cards (name, balance, balance_as_of, apr, annual_fee, fee_renewal, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Card added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/credit-cards/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = cardFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE credit_cards SET name = ?, balance = ?, balance_as_of = ?, apr = ?, annual_fee = ?, fee_renewal = ?, notes = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Card not found' });
+        res.json({ message: 'Card saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/credit-cards/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM credit_cards WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Card not found' });
+        res.json({ message: 'Card deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

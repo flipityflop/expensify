@@ -78,6 +78,18 @@ CREATE TABLE fixed_expenses (
     due_month INTEGER,                         -- 1-12, yearly ones only
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE credit_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    balance REAL NOT NULL DEFAULT 0,           -- owed now; below 0 when in credit
+    balance_as_of TEXT,                        -- YYYY-MM-DD the balance was read
+    apr REAL,                                  -- percentage, e.g. 24.99; null = not known
+    annual_fee REAL NOT NULL DEFAULT 0,
+    fee_renewal TEXT,                          -- YYYY-MM-DD the fee posts; rolled forward yearly on the page
+    notes TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 The monthly plan on the budget page is three reserved rows in `budget_goals`,
@@ -116,6 +128,10 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `POST` | `/api/fixed-expenses` | Add a fixed expense |
 | `PUT` | `/api/fixed-expenses/:id` | Replace a fixed expense's category, name, amount, frequency and due date |
 | `DELETE` | `/api/fixed-expenses/:id` | Delete by id |
+| `GET` | `/api/credit-cards` | All credit cards |
+| `POST` | `/api/credit-cards` | Add a card |
+| `PUT` | `/api/credit-cards/:id` | Replace a card's name, balance and its as-of date, APR, annual fee, renewal date and notes |
+| `DELETE` | `/api/credit-cards/:id` | Delete by id |
 
 ## Categories
 
@@ -148,6 +164,17 @@ year, Rosh Hashanah (1 Tishrei) to the day before the next
   one is added. Every fixed expense is also listed below the goals, soonest due
   first.
 
+## Cards page
+
+- **Credit cards**, highest APR first: balance and when it was read, APR and
+  roughly what carrying the balance costs a month (balance x APR / 12), and the
+  annual fee with its next renewal - amber within 30 days. Totals across all
+  cards at the top.
+- **Debt tracker**: one bar per debt, emptying as it is paid down.
+
+On a phone the tab bar slides sideways rather than squeezing four tabs in, and
+fades at whichever edge has more tabs past it.
+
 ## Project Structure
 
 ```
@@ -165,18 +192,22 @@ expensify-site/
 │   ├── test-hebrew-calendar.js
 │   ├── test-budget.js
 │   ├── test-fixed-expenses.js
+│   ├── test-cards.js
 │   └── test-debt.js
 └── public/                # Served by Express static middleware
     ├── index.html         # Main entry form
     ├── login.html
     ├── budget.html        # Goals vs actual, per month
     ├── all-expenses.html  # Filter / chart / export view
+    ├── cards.html         # Credit cards + debt tracker
     ├── categories.js      # THE category list - browser and scripts both read it
     ├── hebrew-calendar.js # Rosh Hashanah for any year, for Tzedakah's year
-    ├── auth.js            # Shared auth helpers + active-tab marking
+    ├── auth.js            # Shared auth helpers + active-tab marking and sliding
+    ├── helpers.js         # money, escaping, local dates, modal closing (budget + cards)
     ├── script.js
     ├── budget.js
-    ├── debts.js           # Debt tracker section of the budget page
+    ├── cards.js           # Credit cards section of the cards page
+    ├── debts.js           # Debt tracker section of the cards page
     ├── fixed-expenses.js  # Fixed expenses: the modal, opened rows, due-date schedule
     ├── all-expenses.js
     └── style.css
@@ -193,10 +224,11 @@ node scripts/test-csv-roundtrip.js      # export -> import survives a round trip
 node scripts/test-hebrew-calendar.js    # Rosh Hashanah against published dates
 node scripts/test-budget.js             # autofill split, plan, fixed expenses, Tzedakah's year
 node scripts/test-fixed-expenses.js     # next due dates, opened rows, schedule
+node scripts/test-cards.js              # card interest, fee renewal, order, totals
 node scripts/test-debt.js               # debt remaining + bar arithmetic
 ```
 
-`npm test` runs all six. The first needs `TURSO_*` set; the others do not
+`npm test` runs all seven. The first needs `TURSO_*` set; the others do not
 touch the database.
 
 ## Deployment

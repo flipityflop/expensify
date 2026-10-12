@@ -1,8 +1,8 @@
-// Debt tracker section of the budget page.
+// Debt tracker section of the cards page.
 //
-// Loaded after budget.js - classic scripts share one top-level scope, so
-// `money()` here is budget.js's and every name below is kept distinct from the
-// ones that file already declares.
+// Loaded after helpers.js and cards.js - classic scripts share one top-level
+// scope, so `money()`, `escapeHtml()` and `isoDate()` here are helpers.js's,
+// and every name below is kept distinct from the ones cards.js declares.
 
 const debtList = document.getElementById('debt-list');
 const payoffBtn = document.getElementById('payoff-btn');
@@ -32,14 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('debt-save').addEventListener('click', saveDebt);
     debtDeleteBtn.addEventListener('click', deleteDebt);
 
-    // Every close control carries the id of the modal it closes, so the two
-    // modals need one listener between them rather than four.
-    document.addEventListener('click', e => {
-        const closes = e.target.dataset && e.target.dataset.close;
-        if (closes) document.getElementById(closes).style.display = 'none';
-        else if (e.target === debtModal || e.target === payoffModal) e.target.style.display = 'none';
-    });
-
     debtList.addEventListener('click', e => {
         const id = e.target.dataset && e.target.dataset.debtEdit;
         if (id) openDebtModal(debts.find(d => d.id === Number(id)));
@@ -62,7 +54,7 @@ async function loadDebts() {
         renderDebts();
     } catch (error) {
         console.error('Error loading debts:', error);
-        debtList.innerHTML = '<p class="debt-empty" style="color: #ef4444;">Error loading debts.</p>';
+        debtList.innerHTML = '<p class="empty-note" style="color: #ef4444;">Error loading debts.</p>';
     }
 }
 
@@ -74,15 +66,10 @@ function debtLeft(debt) {
 
 // Built from local parts rather than parsing the string as a date, which would
 // be read as UTC and show the day before west of Greenwich.
-function debtDate(isoDate) {
-    if (!isoDate) return '—';
-    const [year, month, day] = isoDate.split('-');
+function debtDate(iso) {
+    if (!iso) return '—';
+    const [year, month, day] = iso.split('-');
     return new Date(year, month - 1, day).toLocaleDateString();
-}
-
-// Debt names and notes are free text going into innerHTML.
-function escapeHtml(text) {
-    return String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
 // The bar is what is left, not what is paid: it empties as the debt goes down.
@@ -95,7 +82,7 @@ function debtRowHtml(debt) {
             <div class="debt-row-head">
                 <span class="debt-name">${escapeHtml(debt.name)}</span>
                 <span class="debt-figures">${money(left)} left of ${money(debt.total)}</span>
-                <button type="button" class="debt-btn" data-debt-edit="${debt.id}">Edit</button>
+                <button type="button" class="small-btn" data-debt-edit="${debt.id}">Edit</button>
             </div>
             <div class="progress-bar">
                 <div class="progress-fill debt-fill" style="width: ${percent}%"></div>
@@ -108,12 +95,7 @@ function debtRowHtml(debt) {
 function renderDebts() {
     debtList.innerHTML = debts.length
         ? debts.map(debtRowHtml).join('')
-        : '<p class="debt-empty">No debts yet.</p>';
-}
-
-function todayValue() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        : '<p class="empty-note">No debts yet.</p>';
 }
 
 function openPayoff() {
@@ -122,7 +104,7 @@ function openPayoff() {
     payoffSelect.innerHTML = '';
     debts.forEach(d => payoffSelect.appendChild(new Option(`${d.name} — ${money(debtLeft(d))} left`, d.id)));
     payoffAmountInput.value = '';
-    payoffDateInput.value = todayValue();
+    payoffDateInput.value = isoDate(new Date());
     payoffModal.style.display = 'block';
 }
 
@@ -134,7 +116,7 @@ async function savePayoff() {
         const response = await fetch(`/api/debts/${payoffSelect.value}/payoff`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-            body: JSON.stringify({ amount, date: payoffDateInput.value || todayValue() })
+            body: JSON.stringify({ amount, date: payoffDateInput.value || isoDate(new Date()) })
         });
         if (!response.ok) throw new Error((await response.json()).error || 'Failed to save payoff');
 
@@ -153,7 +135,7 @@ function openDebtModal(debt) {
     debtNameInput.value = debt ? debt.name : '';
     debtTotalInput.value = debt ? debt.total : '';
     debtPaidInput.value = debt ? debt.paid : '';
-    debtAsOfInput.value = debt ? debt.as_of || todayValue() : todayValue();
+    debtAsOfInput.value = debt ? debt.as_of || isoDate(new Date()) : isoDate(new Date());
     debtNotesInput.value = debt ? debt.notes || '' : '';
     debtDeleteBtn.style.display = debt ? 'block' : 'none';
     debtModal.style.display = 'block';
@@ -177,7 +159,7 @@ async function saveDebt() {
                 total,
                 paid,
                 notes: debtNotesInput.value.trim(),
-                as_of: debtAsOfInput.value || todayValue()
+                as_of: debtAsOfInput.value || isoDate(new Date())
             })
         });
         if (!response.ok) throw new Error((await response.json()).error || 'Failed to save debt');

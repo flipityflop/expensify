@@ -4,7 +4,8 @@
 //
 //   node scripts/test-debt.js
 //
-// Runs the real shipped debts.js in a vm with a stub DOM. No database.
+// Runs the real shipped helpers.js and debts.js in a vm with a stub DOM, as
+// the cards page loads them. No database.
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -27,11 +28,10 @@ const ctx = vm.createContext({
     document: { getElementById: stubEl, addEventListener() {}, querySelectorAll: () => [] },
     window: { location: {} },
     localStorage: { getItem: () => 'x' },
-    // debts.js is loaded after budget.js in the page and shares its scope.
-    money: amount => `$${amount.toFixed(2)}`,
     console
 });
 
+vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'helpers.js'), 'utf8'), ctx);
 vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'debts.js'), 'utf8'), ctx);
 
 const call = expr => vm.runInContext(`out = ${expr}; out`, ctx);

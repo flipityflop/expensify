@@ -1457,6 +1457,10 @@ tr:hover {
 /* Deliberately not built on .type-btn: that one's active fill is id-scoped to
    the expense/income buttons and it stacks vertically under 768px, which is
    wrong for a nav bar. */
+/* Slides sideways when the tabs do not fit, rather than squeezing them: on a
+   phone the bar scrolls, comes to rest with a tab centred (so never under a
+   faded edge), and fades at whichever edge has more tabs past it. auth.js sets
+   .more-left / .more-right and centres the current page's tab the same way. */
 .tab-nav {
     display: flex;
     gap: 8px;
@@ -1465,10 +1469,33 @@ tr:hover {
     border: 1px solid #2a3441;
     border-radius: 10px;
     padding: 6px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.tab-nav::-webkit-scrollbar { display: none; }
+
+.tab-nav.more-right {
+    -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
+    mask-image: linear-gradient(to right, #000 82%, transparent);
+}
+
+.tab-nav.more-left {
+    -webkit-mask-image: linear-gradient(to left, #000 82%, transparent);
+    mask-image: linear-gradient(to left, #000 82%, transparent);
+}
+
+.tab-nav.more-left.more-right {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+    mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
 }
 
 .tab-nav a {
-    flex: 1;
+    flex: 1 0 0; /* equal widths, but never narrower than the label */
+    scroll-snap-align: center;
+    white-space: nowrap;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1492,6 +1519,12 @@ tr:hover {
     background: #0ea5b7;
     color: #04222a;
     font-weight: 600;
+}
+
+/* Wide enough to tap, so on a phone the fourth tab sits past the edge and
+   the bar slides to it. */
+@media (max-width: 600px) {
+    .tab-nav a { min-width: 30%; }
 }
 
 /* Selected state for the merchant chips, plus a touch target that clears the
@@ -1523,3 +1556,87 @@ tr:hover {
     padding-top: 20px;
     border-top: 1px solid #2a3441;
 }
+
+/* ===== SHARED PAGE PARTS (budget, cards) ===== */
+
+.section-title {
+    font-size: 1.1rem;
+    color: #7dd3fc;
+    margin: 28px 0 10px;
+}
+
+.section-note {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    margin: -6px 0 12px;
+}
+
+/* A section title with a button at its right. */
+.section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 28px 0 10px;
+}
+
+.section-head .section-title { margin: 0; }
+
+.small-btn {
+    margin-left: 8px;
+    padding: 4px 10px;
+    border: 1px solid #4b5563;
+    border-radius: 6px;
+    background: #374151;
+    color: #e6e8eb;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.small-btn:hover { border-color: #67e8f9; color: #67e8f9; }
+.small-btn:disabled { opacity: 0.5; cursor: default; }
+
+.empty-note {
+    color: #9ca3af;
+    font-size: 0.9rem;
+}
+
+/* Form fields inside a .modal */
+.modal-field { margin-bottom: 14px; }
+
+.modal-field label {
+    display: block;
+    margin-bottom: 6px;
+    color: #a8b3cf;
+    font-size: 0.85rem;
+}
+
+.modal-field input, .modal-field select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 2px solid #374151;
+    border-radius: 6px;
+    background-color: #111827;
+    color: #e6e8eb;
+    font-size: 0.9rem;
+}
+
+.modal-field input:focus, .modal-field select:focus {
+    outline: none;
+    border-color: #67e8f9;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Delete, pushed to the far left of .modal-actions. After .cancel-btn, which
+   it is paired with, so its colour wins. */
+.danger-btn {
+    margin-right: auto;
+    background: #7f1d1d;
+}
+
+.danger-btn:hover { background: #991b1b; }
