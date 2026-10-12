@@ -33,6 +33,7 @@ const ctx = vm.createContext({
 
 vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'categories.js'), 'utf8'), ctx);
 vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'hebrew-calendar.js'), 'utf8'), ctx);
+vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'helpers.js'), 'utf8'), ctx);
 vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'budget.js'), 'utf8'), ctx);
 
 const ex = (date, category, amount, is_positive = 0) =>

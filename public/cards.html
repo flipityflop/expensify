@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cards - Expense Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Three tiles across even on a phone, where style.css would otherwise
+           stack .summary into a column. */
+        #card-totals {
+            flex-direction: row;
+            gap: 10px;
+        }
+
+        #card-totals .summary-item {
+            min-width: 0;
+            padding: 12px;
+        }
+
+        #card-totals .summary-label { font-size: 0.8rem; }
+        #card-totals .summary-value { font-size: 1.1rem; }
+
+        /* ----- Credit cards and debts share the row look ----- */
+
+        .card-row, .debt-row {
+            background: #1a1f2e;
+            border: 1px solid #2a3441;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+        }
+
+        .card-row-head, .debt-row-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-name, .debt-name { font-weight: 600; }
+
+        .card-balance {
+            margin-left: auto;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .card-facts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 16px;
+            margin-top: 8px;
+            color: #a8b3cf;
+            font-size: 0.85rem;
+        }
+
+        .card-facts strong { color: #e6e8eb; }
+
+        /* Amber, as for fixed expenses due soon on the budget page: money about
+           to leave. */
+        .renews-soon {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        .card-meta, .debt-meta {
+            margin-top: 8px;
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+
+        /* ----- Debt tracker ----- */
+
+        .debt-row-head { margin-bottom: 10px; }
+
+        .debt-figures {
+            margin-left: auto;
+            color: #a8b3cf;
+            font-size: 0.9rem;
+        }
+
+        /* The bar tracks the balance still owed, so it empties as the debt is
+           paid down. Amber to keep it apart from the green spending bars. */
+        .debt-row .progress-bar {
+            height: 14px;
+            margin-bottom: 0;
+        }
+
+        .debt-fill { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        #add-debt-btn { margin: 4px 0 0; }
+    </style>
+</head>
+<body>
+    <div class="container full-width">
+        <nav class="tab-nav">
+            <a href="/">Home</a>
+            <a href="/budget.html">Budget</a>
+            <a href="/all-expenses.html">Expenses</a>
+            <a href="/cards.html">Cards</a>
+        </nav>
+
+        <header class="flex">
+            <h1>💳 Cards</h1>
+        </header>
+
+        <div id="card-totals" class="summary"></div>
+
+        <div class="section-head">
+            <h2 class="section-title">Credit cards</h2>
+            <button type="button" id="add-card-btn" class="small-btn">Add card</button>
+        </div>
+        <p class="section-note">Highest APR first: money paid beyond the minimum saves the most interest there.</p>
+        <div id="card-list"><p class="empty-note">Loading cards...</p></div>
+
+        <div class="section-head">
+            <h2 class="section-title">Debt tracker</h2>
+            <button type="button" id="payoff-btn" class="small-btn">Payoff</button>
+        </div>
+        <div id="debt-list"></div>
+        <button type="button" id="add-debt-btn" class="small-btn">Add new debt</button>
+
+        <div id="card-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="card-modal-title">Add card</h3>
+                    <span class="close" data-close="card-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="card-name">Name</label>
+                        <input type="text" id="card-name" placeholder="e.g. Chase Sapphire">
+                    </div>
+                    <div class="modal-field">
+                        <label for="card-balance">Current balance</label>
+                        <input type="number" id="card-balance" step="0.01" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="card-as-of">Balance as of</label>
+                        <input type="date" id="card-as-of">
+                    </div>
+                    <div class="modal-field">
+                        <label for="card-apr">APR (%)</label>
+                        <input type="number" id="card-apr" step="0.01" min="0" max="100" placeholder="e.g. 24.99">
+                    </div>
+                    <div class="modal-field">
+                        <label for="card-fee">Annual fee</label>
+                        <input type="number" id="card-fee" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="card-renewal">Fee renews on</label>
+                        <input type="date" id="card-renewal">
+                    </div>
+                    <div class="modal-field">
+                        <label for="card-notes">Notes</label>
+                        <input type="text" id="card-notes">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="card-delete" class="cancel-btn danger-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="card-modal">Cancel</button>
+                        <button type="button" id="card-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="payoff-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Payoff</h3>
+                    <span class="close" data-close="payoff-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="payoff-debt">Debt</label>
+                        <select id="payoff-debt"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label for="payoff-amount">Amount</label>
+                        <input type="number" id="payoff-amount" step="0.01" min="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="payoff-date">Date</label>
+                        <input type="date" id="payoff-date">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="cancel-btn" data-close="payoff-modal">Cancel</button>
+                        <button type="button" id="payoff-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="debt-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="debt-modal-title">Add new debt</h3>
+                    <span class="close" data-close="debt-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="debt-name">Name</label>
+                        <input type="text" id="debt-name">
+                    </div>
+                    <div class="modal-field">
+                        <label for="debt-total">Total</label>
+                        <input type="number" id="debt-total" step="0.01" min="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="debt-paid">Paid off</label>
+                        <input type="number" id="debt-paid" step="0.01" min="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="debt-as-of">As of</label>
+                        <input type="date" id="debt-as-of">
+                    </div>
+                    <div class="modal-field">
+                        <label for="debt-notes">Notes</label>
+                        <input type="text" id="debt-notes">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="debt-delete" class="cancel-btn danger-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="debt-modal">Cancel</button>
+                        <button type="button" id="debt-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-footer">
+            <button onclick="logout()" class="logout-btn" title="Logout">🚪 Logout</button>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script src="helpers.js"></script>
+    <script src="cards.js"></script>
+    <script src="debts.js"></script>
+</body>
+</html>

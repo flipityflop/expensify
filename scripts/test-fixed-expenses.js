@@ -31,7 +31,7 @@ const ctx = vm.createContext({
     console
 });
 
-for (const file of ['categories.js', 'hebrew-calendar.js', 'auth.js', 'budget.js', 'debts.js', 'fixed-expenses.js']) {
+for (const file of ['categories.js', 'hebrew-calendar.js', 'auth.js', 'helpers.js', 'budget.js', 'fixed-expenses.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, file), 'utf8'), ctx);
 }
 

@@ -126,12 +126,6 @@ function spentBetween(category, start, end) {
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 }
 
-// YYYY-MM-DD from a Date's local parts. toISOString() is UTC, which is already
-// tomorrow by the evening west of Greenwich.
-function isoDate(date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 // The day that decides which year a yearly goal shows for the selected month:
 // today while that month is the current one, otherwise its last day. A month
 // that Rosh Hashanah falls in belongs to the year it ends in.
@@ -174,13 +168,6 @@ function averageMonthly(category, month) {
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     return Math.round((total / months) * 100) / 100;
-}
-
-// Rounded to the cent before the sign is taken, so float dust such as
-// -0.0000001 does not print as "-$0.00".
-function money(amount) {
-    const cents = Math.round(amount * 100) / 100;
-    return `${cents < 0 ? '-' : ''}$${Math.abs(cents).toFixed(2)}`;
 }
 
 function diffCell(diff) {

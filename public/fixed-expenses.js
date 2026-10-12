@@ -1,12 +1,12 @@
 // Fixed expenses: named recurring costs inside a category - Phone and Internet
 // inside Bills & Insurance - each with an optional due date.
 //
-// Loaded after budget.js and debts.js - classic scripts share one top-level
+// Loaded after helpers.js and budget.js - classic scripts share one top-level
 // scope. The list itself (`fixedItems`) and the sums autofill needs live in
 // budget.js; this file is the add/edit modal, the list under an opened
 // category row, and the schedule of when each one is due. budget.js calls
 // fixedDetailHtml() and renderSchedule() from render(), which only runs once
-// every script has loaded. `escapeHtml()` is debts.js's.
+// every script has loaded.
 
 const fixedModal = document.getElementById('fixed-modal');
 const fixedModalTitle = document.getElementById('fixed-modal-title');
@@ -38,16 +38,14 @@ document.addEventListener('DOMContentLoaded', function() {
     fixedDeleteBtn.addEventListener('click', deleteFixedItem);
 
     // The Edit and Add buttons are rebuilt with every render, so they are
-    // caught here rather than bound one at a time. The close and Cancel
-    // controls carry data-close, which debts.js already handles.
+    // caught here rather than bound one at a time. Closing the modal is
+    // helpers.js's.
     document.addEventListener('click', e => {
         const button = e.target.closest && e.target.closest('[data-item-edit], [data-item-add]');
         if (button && button.dataset.itemEdit) {
             openFixedModal(fixedItems.find(item => item.id === Number(button.dataset.itemEdit)));
         } else if (button) {
             openFixedModal(null, button.dataset.itemAdd);
-        } else if (e.target === fixedModal) {
-            fixedModal.style.display = 'none';
         }
     });
 });
@@ -113,7 +111,7 @@ function fixedDetailHtml(category) {
             <span class="fixed-item-name">${escapeHtml(item.name)}</span>
             <span class="fixed-item-amount">${perPeriod(item)}</span>
             <span class="fixed-item-due">${dueLabel(item)}</span>
-            <button type="button" class="debt-btn" data-item-edit="${item.id}">Edit</button>
+            <button type="button" class="small-btn" data-item-edit="${item.id}">Edit</button>
         </li>`).join('');
 
     return `
@@ -122,7 +120,7 @@ function fixedDetailHtml(category) {
                 ${items.length ? `<ul class="fixed-items">${list}</ul>` : ''}
                 <div class="fixed-items-foot">
                     <span>${summary}</span>
-                    <button type="button" class="debt-btn" data-item-add="${category}">+ Add fixed expense</button>
+                    <button type="button" class="small-btn" data-item-add="${category}">+ Add fixed expense</button>
                 </div>
             </td>
         </tr>
@@ -150,7 +148,7 @@ function scheduleRowHtml(item, due, today) {
             <td>${escapeHtml(item.name)}</td>
             <td>${item.category}</td>
             <td>${perPeriod(item)}</td>
-            <td><button type="button" class="debt-btn" data-item-edit="${item.id}">Edit</button></td>
+            <td><button type="button" class="small-btn" data-item-edit="${item.id}">Edit</button></td>
         </tr>
     `;
 }
@@ -164,7 +162,7 @@ function renderSchedule() {
         .sort((a, b) => (a.due === null) - (b.due === null) || a.due - b.due || a.item.name.localeCompare(b.item.name));
 
     if (!rows.length) {
-        scheduleTbody.innerHTML = '<tr><td colspan="5" class="debt-empty">No fixed expenses yet. Open a category above, or use Add fixed expense.</td></tr>';
+        scheduleTbody.innerHTML = '<tr><td colspan="5" class="empty-note">No fixed expenses yet. Open a category above, or use Add fixed expense.</td></tr>';
         scheduleTfoot.innerHTML = '';
         return;
     }
