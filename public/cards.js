@@ -101,22 +101,24 @@ function sortCards(list) {
     return [...list].sort((a, b) => (b.apr ?? -1) - (a.apr ?? -1) || b.balance - a.balance);
 }
 
+// Empty when the card has no annual fee.
 function renewalHtml(card, today) {
-    if (!card.annual_fee) return 'No annual fee';
+    if (!card.annual_fee) return '';
     const renewal = nextRenewal(card, today);
-    if (!renewal) return `${money(card.annual_fee)} annual fee · renewal date not set`;
+    if (!renewal) return `${money(card.annual_fee)}/yr fee`;
 
     const days = daysFrom(today, renewal);
     const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
     return `<span${days <= RENEWAL_WARNING_DAYS ? ' class="renews-soon"' : ''}>`
-        + `${money(card.annual_fee)} annual fee · renews ${cardDate(renewal)} (${when})</span>`;
+        + `${money(card.annual_fee)}/yr fee · renews ${cardDate(renewal)} (${when})</span>`;
 }
 
+// Only what is known: a card with no APR or fee set shows neither.
 function cardRowHtml(card, today) {
     const interest = monthlyInterest(card);
     const facts = [
-        card.apr === null ? 'APR not set' : `<strong>${card.apr}%</strong> APR`,
-        interest ? `≈ ${money(interest)} interest a month` : null,
+        card.apr === null ? '' : `<strong>${card.apr}%</strong> APR`,
+        interest ? `≈ ${money(interest)}/mo interest` : '',
         renewalHtml(card, today)
     ].filter(Boolean);
 
@@ -127,8 +129,8 @@ function cardRowHtml(card, today) {
                 <span class="card-balance">${money(card.balance)}</span>
                 <button type="button" class="small-btn" data-card-edit="${card.id}">Edit</button>
             </div>
-            <div class="card-facts">${facts.map(f => `<span>${f}</span>`).join('')}</div>
-            <div class="card-meta">balance as of ${card.balance_as_of ? cardDate(card.balance_as_of) : '—'}${card.notes ? ` · ${escapeHtml(card.notes)}` : ''}</div>
+            ${facts.length ? `<div class="card-facts">${facts.map(f => `<span>${f}</span>`).join('')}</div>` : ''}
+            <div class="card-meta">${card.balance_as_of ? `as of ${cardDate(card.balance_as_of)}` : ''}${card.balance_as_of && card.notes ? ' · ' : ''}${card.notes ? escapeHtml(card.notes) : ''}</div>
         </div>
     `;
 }
@@ -149,11 +151,11 @@ function renderCards() {
 
     cardTotals.innerHTML = `
         <div class="summary-item">
-            <span class="summary-label">Owed on cards</span>
+            <span class="summary-label">Balance</span>
             <span class="summary-value">${money(totals.balance)}</span>
         </div>
         <div class="summary-item">
-            <span class="summary-label">Interest a month</span>
+            <span class="summary-label">Interest / mo</span>
             <span class="summary-value${totals.interest ? ' expense' : ''}">≈ ${money(totals.interest)}</span>
         </div>
         <div class="summary-item">
@@ -189,9 +191,9 @@ async function saveCard() {
     const fee = cardFeeInput.value === '' ? 0 : parseFloat(cardFeeInput.value);
 
     if (!name) return alert('Enter a name.');
-    if (isNaN(balance)) return alert('Enter the balance, or leave it blank for none.');
-    if (apr !== null && !(apr >= 0 && apr <= 100)) return alert('The APR is a percentage, 0 to 100.');
-    if (!(fee >= 0)) return alert('The annual fee is 0 or more. Leave it blank for none.');
+    if (isNaN(balance)) return alert('Enter a balance.');
+    if (apr !== null && !(apr >= 0 && apr <= 100)) return alert('APR must be 0–100.');
+    if (!(fee >= 0)) return alert('Annual fee must be 0 or more.');
 
     try {
         const response = await fetch(editingCardId ? `/api/credit-cards/${editingCardId}` : '/api/credit-cards', {

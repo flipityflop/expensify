@@ -150,35 +150,16 @@ Budget goals are monthly, except **Tzedakah** and **Travel**, which are yearly
 year, Rosh Hashanah (1 Tishrei) to the day before the next
 (`HEBREW_YEAR_CATEGORIES`); Travel's is January to December.
 
-## Budget page
+## How the pages work
 
-- **Monthly plan**: income, less a debt payment (card balances carried from
-  earlier months - those purchases already counted as spending when they were
-  made) and savings, is what is left for spending.
-- **Autofill** splits what is left across the monthly goals in proportion to
-  past spending. Fixed costs come off first and are never scaled: a pinned
-  category keeps its whole goal; any other category keeps its fixed expenses,
-  and only its past spending above them is scaled.
-- **Fixed expenses** live inside a category: open its row with ▸ to list, add
-  or edit them. A category's goal is raised to cover its fixed expenses when
-  one is added. Every fixed expense is also listed below the goals, soonest due
-  first.
-
-## Cards page
-
-- **Credit cards**, highest APR first: balance and when it was read, APR and
-  roughly what carrying the balance costs a month (balance x APR / 12), and the
-  annual fee with its next renewal - amber within 30 days. Totals across all
-  cards at the top.
-- **Debt tracker**: one bar per debt, emptying as it is paid down.
-
-On a phone the tab bar slides sideways rather than squeezing four tabs in, and
-fades at whichever edge has more tabs past it.
+What each page does and why, and the rule on UI text (none unless it earns its
+place), are in [AGENTS.md](AGENTS.md).
 
 ## Project Structure
 
 ```
 expensify-site/
+├── AGENTS.md              # How the pages work + UI text rule (CLAUDE.md imports it)
 ├── server.js              # Express app + libsql client
 ├── vercel.json            # Vercel routing (everything → server.js)
 ├── package.json

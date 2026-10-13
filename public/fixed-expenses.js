@@ -78,10 +78,11 @@ function nextDue(item, today) {
     return thisMonth >= today ? thisMonth : dueIn(year, today.getMonth() + 1, item.due_day);
 }
 
-// "due the 15th" for a monthly item, "due Mar 15" for a yearly one. 2000 is a
-// leap year, so a yearly item due 29 February keeps its day.
+// "due the 15th" for a monthly item, "due Mar 15" for a yearly one, nothing
+// for one with no due date. 2000 is a leap year, so a yearly item due 29
+// February keeps its day.
 function dueLabel(item) {
-    if (!item.due_day) return 'no due date';
+    if (!item.due_day) return '';
     if (item.frequency === 'yearly') {
         return `due ${dueIn(2000, item.due_month - 1, item.due_day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
     }
@@ -89,7 +90,7 @@ function dueLabel(item) {
 }
 
 function perPeriod(item) {
-    return `${money(item.amount)} ${item.frequency === 'yearly' ? 'a year' : 'a month'}`;
+    return `${money(item.amount)}/${item.frequency === 'yearly' ? 'yr' : 'mo'}`;
 }
 
 // ---- under an opened category row ------------------------------------------
@@ -98,13 +99,13 @@ function fixedDetailHtml(category) {
     const items = fixedItemsIn(category);
     const total = fixedItemsTotal(category);
     const goal = goals[category];
-    const unit = goalPeriod(category) === 'yearly' ? 'a year' : 'a month';
 
-    let summary;
-    if (!items.length) summary = `No fixed expenses in ${category} yet.`;
-    else if (goal === undefined) summary = `Fixed: ${money(total)} ${unit}.`;
-    else if (total > goal + 0.005) summary = `<span class="over">Fixed expenses come to ${money(total)}, more than the ${money(goal)} goal.</span>`;
-    else summary = `Fixed ${money(total)} of the ${money(goal)} goal · ${money(goal - total)} flexible`;
+    let summary = '';
+    if (items.length) {
+        if (goal === undefined) summary = `Fixed ${money(total)}`;
+        else if (total > goal + 0.005) summary = `<span class="over">Fixed ${money(total)} is over the ${money(goal)} goal</span>`;
+        else summary = `Fixed ${money(total)} · Flexible ${money(goal - total)}`;
+    }
 
     const list = items.map(item => `
         <li class="fixed-item">
@@ -137,14 +138,14 @@ function scheduleRowHtml(item, due, today) {
         day: 'numeric',
         ...(due.getFullYear() !== today.getFullYear() && { year: 'numeric' })
     });
-    const until = days === null ? 'no due date'
+    const until = days === null ? ''
         : days === 0 ? 'today'
         : days === 1 ? 'tomorrow'
         : `in ${days} days`;
 
     return `
         <tr${days !== null && days <= 7 ? ' class="due-soon"' : ''}>
-            <td>${when}<span class="due-in">${until}</span></td>
+            <td>${when}${until ? `<span class="due-in">${until}</span>` : ''}</td>
             <td>${escapeHtml(item.name)}</td>
             <td>${item.category}</td>
             <td>${perPeriod(item)}</td>
@@ -162,7 +163,7 @@ function renderSchedule() {
         .sort((a, b) => (a.due === null) - (b.due === null) || a.due - b.due || a.item.name.localeCompare(b.item.name));
 
     if (!rows.length) {
-        scheduleTbody.innerHTML = '<tr><td colspan="5" class="empty-note">No fixed expenses yet. Open a category above, or use Add fixed expense.</td></tr>';
+        scheduleTbody.innerHTML = '<tr><td colspan="5" class="empty-note">No fixed expenses yet.</td></tr>';
         scheduleTfoot.innerHTML = '';
         return;
     }
@@ -173,7 +174,7 @@ function renderSchedule() {
     const perMonth = fixedItems.reduce((sum, item) => sum + (item.frequency === 'yearly' ? item.amount / 12 : item.amount), 0);
     scheduleTfoot.innerHTML = `
         <tr>
-            <td colspan="3">Total a month <span class="due-in">yearly ones at a twelfth</span></td>
+            <td colspan="3">Monthly total</td>
             <td>${money(perMonth)}</td>
             <td></td>
         </tr>
@@ -186,7 +187,7 @@ function renderSchedule() {
 function showDueFields() {
     const yearly = fixedFrequencySelect.value === 'yearly';
     fixedDueMonthSelect.style.display = yearly ? '' : 'none';
-    fixedDueLabel.textContent = yearly ? 'Due date' : 'Due day of the month';
+    fixedDueLabel.textContent = yearly ? 'Due date' : 'Due day';
 }
 
 // One modal for both: `item` is the one being edited, or null to add a new one
@@ -230,7 +231,7 @@ async function saveFixedItem() {
     if (!category) return alert('Choose a category.');
     if (isNaN(amount) || amount <= 0) return alert('Enter an amount.');
     if (dueDay !== null && !(Number.isInteger(dueDay) && dueDay >= 1 && dueDay <= 31)) {
-        return alert('The due day is a day of the month, 1 to 31. Leave it blank for no due date.');
+        return alert('Due day must be 1–31.');
     }
 
     try {

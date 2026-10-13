@@ -72,7 +72,7 @@ assert.deepStrictEqual(
     ['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '23rd', '31st']
 );
 assert.strictEqual(call(`dueLabel(${monthly(15)})`), 'due the 15th');
-assert.strictEqual(call(`dueLabel(${JSON.stringify({ frequency: 'monthly', due_day: null })})`), 'no due date');
+assert.strictEqual(call(`dueLabel(${JSON.stringify({ frequency: 'monthly', due_day: null })})`), '');   // nothing to say
 assert.ok(call(`dueLabel(${yearly(2, 29)})`).startsWith('due '));
 
 // ---- under an opened category row ----------------------------------------
@@ -83,16 +83,19 @@ vm.runInContext(`fixedItems = ${JSON.stringify([
 
 // 80 a month + 1200 a year at a twelfth = 180 of the 400 goal fixed.
 const detail = call(`fixedDetailHtml('Bills & Insurance')`);
-assert.ok(detail.includes('Fixed $180.00 of the $400.00 goal · $220.00 flexible'), detail);
+assert.ok(detail.includes('Fixed $180.00 · Flexible $220.00'), detail);
 assert.ok(detail.includes('Phone &lt;5G&gt;'), 'item name not escaped');
-assert.ok(detail.includes('$1200.00 a year'));
+assert.ok(detail.includes('$80.00/mo') && detail.includes('$1200.00/yr'));
 assert.ok(detail.includes('data-item-add="Bills & Insurance"'));
 
 // Fixed expenses above the goal are called out rather than shown as negative.
 vm.runInContext(`goals = { 'Bills & Insurance': 100 };`, ctx);
-assert.ok(call(`fixedDetailHtml('Bills & Insurance')`).includes('more than the $100.00 goal'));
+assert.ok(call(`fixedDetailHtml('Bills & Insurance')`).includes('<span class="over">Fixed $180.00 is over the $100.00 goal</span>'));
 
-assert.ok(call(`fixedDetailHtml('Groceries')`).includes('No fixed expenses in Groceries yet.'));
+// An empty category opens to just its Add button - no explainer line.
+const empty = call(`fixedDetailHtml('Groceries')`);
+assert.ok(empty.includes('data-item-add="Groceries"'));
+assert.ok(!/No fixed|yet/.test(empty), empty);
 
 // ---- the schedule --------------------------------------------------------
 // Today is 12 October 2026 throughout.
@@ -102,7 +105,8 @@ assert.ok(row(2026, 10, 15).includes('class="due-soon"'));
 assert.ok(row(2026, 10, 12).includes('today'));
 assert.ok(row(2026, 10, 13).includes('tomorrow'));
 assert.ok(!row(2026, 11, 1).includes('due-soon'));
-assert.ok(call(`scheduleRowHtml(fixedItems[0], null, new Date(2026, 9, 12))`).includes('no due date'));
+const undated = call(`scheduleRowHtml(fixedItems[0], null, new Date(2026, 9, 12))`);
+assert.ok(undated.includes('<td>—</td>') && !undated.includes('due-in'), undated);
 
 vm.runInContext(`fixedItems = []; goals = {};`, ctx);
 
