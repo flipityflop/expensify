@@ -73,15 +73,18 @@ const shift = days => { const d = new Date(); d.setDate(d.getDate() + days); ret
 const soon = call(`renewalHtml(${card({ annual_fee: 95, fee_renewal: shift(10) })}, '${today}')`);
 assert.ok(soon.includes('renews-soon') && soon.includes('in 10 days'), soon);
 const later = call(`renewalHtml(${card({ annual_fee: 95, fee_renewal: shift(90) })}, '${today}')`);
-assert.ok(!later.includes('renews-soon') && later.includes('$95.00 annual fee'), later);
-assert.strictEqual(call(`renewalHtml(${card({ annual_fee: 0, fee_renewal: shift(10) })}, '${today}')`), 'No annual fee');
-assert.ok(call(`renewalHtml(${card({ annual_fee: 95 })}, '${today}')`).includes('renewal date not set'));
+assert.ok(!later.includes('renews-soon') && later.includes('$95.00/yr fee · renews'), later);
+assert.strictEqual(call(`renewalHtml(${card({ annual_fee: 0, fee_renewal: shift(10) })}, '${today}')`), '');   // no fee, nothing said
+assert.strictEqual(call(`renewalHtml(${card({ annual_fee: 95 })}, '${today}')`), '$95.00/yr fee');
 
 const row = call(`cardRowHtml(${card({ name: 'Visa <Gold>', balance: 1200, apr: 24 })}, '${today}')`);
 assert.ok(row.includes('Visa &lt;Gold&gt;'), 'card name not escaped');
 assert.ok(row.includes('<strong>24%</strong> APR'));
-assert.ok(row.includes('≈ $24.00 interest a month'));
-assert.ok(call(`cardRowHtml(${card({ apr: null })}, '${today}')`).includes('APR not set'));
+assert.ok(row.includes('≈ $24.00/mo interest'));
+
+// A card with nothing known beyond its balance shows no facts line at all.
+const bare = call(`cardRowHtml(${card({ apr: null })}, '${today}')`);
+assert.ok(!bare.includes('card-facts') && !bare.includes('APR'), bare);
 
 // ---- order and totals ----------------------------------------------------
 const list = JSON.stringify([

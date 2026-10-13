@@ -64,15 +64,13 @@
         .plan-table td:last-child { white-space: nowrap; }
         .plan-table label { font-weight: 600; }
 
-        .plan-hint {
-            display: block;
-            color: #9ca3af;
-            font-size: 0.8rem;
-        }
-
         #plan-left { margin-right: 4px; }
 
-        .plan-breakdown { margin: 8px 0 0; }
+        .plan-breakdown {
+            margin: 8px 0 0;
+            color: #9ca3af;
+            font-size: 0.85rem;
+        }
 
         /* Under 768px style.css gives every table a 600px minimum and lets it
            scroll sideways. The plan and the schedule are narrow enough to fit
@@ -193,12 +191,6 @@
 
         .due-inputs #fixed-due-day { max-width: 90px; }
 
-        .field-hint {
-            display: block;
-            margin-top: 4px;
-            color: #9ca3af;
-            font-size: 0.75rem;
-        }
     </style>
 </head>
 <body>
@@ -232,20 +224,19 @@
         </div>
 
         <h2 class="section-title">Monthly plan</h2>
-        <p class="section-note">Everything coming in, less what goes to debt and savings, is what the monthly goals below have to share.</p>
         <div class="table-container">
             <table class="plan-table">
                 <tbody>
                     <tr>
-                        <td><label for="plan-income">Income</label><span class="plan-hint">Everything coming in a month</span></td>
-                        <td><input type="number" id="plan-income" class="goal-input" step="0.01" min="0" placeholder="e.g. 6000"></td>
+                        <td><label for="plan-income">Income</label></td>
+                        <td><input type="number" id="plan-income" class="goal-input" step="0.01" min="0"></td>
                     </tr>
                     <tr>
-                        <td><label for="plan-debt">− Debt payment</label><span class="plan-hint">Toward card balances from earlier months. Those purchases are already counted as spending in the month they were made.</span></td>
+                        <td><label for="plan-debt">− Debt payment</label></td>
                         <td><input type="number" id="plan-debt" class="goal-input" step="0.01" min="0" placeholder="0"></td>
                     </tr>
                     <tr>
-                        <td><label for="plan-savings">− Savings</label><span class="plan-hint">Put aside before anything is spent</span></td>
+                        <td><label for="plan-savings">− Savings</label></td>
                         <td><input type="number" id="plan-savings" class="goal-input" step="0.01" min="0" placeholder="0"></td>
                     </tr>
                 </tbody>
@@ -254,17 +245,15 @@
                         <td>= Left for spending</td>
                         <td>
                             <span id="plan-left">—</span>
-                            <button type="button" id="autofill" class="small-btn"
-                                    title="Split what is left for spending across the monthly categories, in proportion to what each has averaged per month. Pinned categories and fixed expenses stay as they are. Leave the income blank to use the raw averages.">Autofill goals</button>
+                            <button type="button" id="autofill" class="small-btn">Autofill goals</button>
                         </td>
                     </tr>
                 </tfoot>
             </table>
         </div>
-        <p class="section-note plan-breakdown" id="plan-breakdown"></p>
+        <p class="plan-breakdown" id="plan-breakdown"></p>
 
         <h2 class="section-title" id="monthly-heading">Monthly goals</h2>
-        <p class="section-note">Open a category with ▸ to list the fixed expenses inside it, or pin the whole category with Fixed.</p>
         <div class="table-container">
             <table>
                 <thead>
@@ -283,7 +272,6 @@
         </div>
 
         <h2 class="section-title">Yearly goals</h2>
-        <p class="section-note">Lumpy month to month, so these are set and tracked against a whole year: Tzedakah from Rosh Hashanah (1 Tishrei), Travel from January.</p>
         <div class="table-container">
             <table>
                 <thead>
@@ -303,10 +291,9 @@
         <div id="loading" class="loading">Loading budget...</div>
 
         <div class="section-head">
-            <h2 class="section-title">Fixed expenses — when they are due</h2>
+            <h2 class="section-title">Due dates</h2>
             <button type="button" id="add-fixed-btn" class="small-btn">Add fixed expense</button>
         </div>
-        <p class="section-note">Every fixed expense from the categories above, soonest due first.</p>
         <div class="table-container">
             <table class="schedule-table">
                 <thead>
@@ -332,7 +319,7 @@
                 <div class="modal-body">
                     <div class="modal-field">
                         <label for="fixed-name">Name</label>
-                        <input type="text" id="fixed-name" placeholder="e.g. Phone">
+                        <input type="text" id="fixed-name">
                     </div>
                     <div class="modal-field">
                         <label for="fixed-category">Category</label>
@@ -350,12 +337,11 @@
                         </select>
                     </div>
                     <div class="modal-field">
-                        <label id="fixed-due-label" for="fixed-due-day">Due day of the month</label>
+                        <label id="fixed-due-label" for="fixed-due-day">Due day</label>
                         <div class="due-inputs">
                             <select id="fixed-due-month" aria-label="Due month"></select>
                             <input type="number" id="fixed-due-day" min="1" max="31" step="1" placeholder="Day">
                         </div>
-                        <small class="field-hint">Leave the day blank if it has no due date.</small>
                     </div>
                     <div class="modal-actions">
                         <button type="button" id="fixed-delete" class="cancel-btn danger-btn">Delete</button>

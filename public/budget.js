@@ -217,18 +217,17 @@ function renderPlan() {
     planLeft.className = left !== null && left < 0 ? 'over' : '';
 
     if (left === null) {
-        planBreakdown.textContent = 'Set the income to see what is left for spending.';
+        planBreakdown.innerHTML = '';
         return;
     }
 
+    // Unassigned is what is left for spending that no monthly goal has yet.
     const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
     const reserved = monthly.reduce((sum, c) => sum + reservedFor(c), 0);
-    const goalTotal = monthly.reduce((sum, c) => sum + (goals[c] || 0), 0);
-    const spare = left - goalTotal;
+    const spare = left - monthly.reduce((sum, c) => sum + (goals[c] || 0), 0);
 
-    planBreakdown.textContent = `Fixed costs take ${money(reserved)} of it, leaving ${money(left - reserved)} for autofill to split.`
-        + ` Monthly goals total ${money(goalTotal)}: `
-        + (spare >= 0 ? `${money(spare)} not yet given to a goal.` : `${money(-spare)} more than is left for spending.`);
+    planBreakdown.innerHTML = `Fixed ${money(reserved)} · `
+        + (spare >= 0 ? `Unassigned ${money(spare)}` : `<span class="over">Goals over by ${money(-spare)}</span>`);
 }
 
 // ---- the tables -----------------------------------------------------------
@@ -257,8 +256,7 @@ function rowHtml(category, month, showFixed) {
     return `
         <tr${isFixed ? ' class="fixed-row"' : ''}>
             <td>
-                <button type="button" class="expand-btn" data-expand="${category}" aria-expanded="${open}"
-                        title="Show the fixed expenses in ${category}"><span class="caret">${open ? '▾' : '▸'}</span>${category}${count ? `<span class="item-count">${count} fixed</span>` : ''}</button>
+                <button type="button" class="expand-btn" data-expand="${category}" aria-expanded="${open}"><span class="caret">${open ? '▾' : '▸'}</span>${category}${count ? `<span class="item-count">${count} fixed</span>` : ''}</button>
                 ${goalPeriod(category) === 'yearly' ? `<span class="period-note">${yearLabel(category, month)}</span>` : ''}
             </td>
             <td>${goal === undefined ? '—' : money(goal)}</td>
@@ -419,15 +417,9 @@ function planAutofill(month) {
         toSpend,
         reserved,
         available,
-        historic,
         scale,
         goals: rows.map(row => [row.category, Math.round((row.fixedPart + row.flexible * scale) * 100) / 100])
     };
-}
-
-// "a", "a and b", "a, b and c"
-function listing(parts) {
-    return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 async function autofill() {
@@ -440,30 +432,13 @@ async function autofill() {
     }
 
     if (plan.available !== null && plan.available <= 0) {
-        return alert(
-            `Fixed costs take ${money(plan.reserved)} of the ${money(plan.toSpend)} left for spending,`
-            + ` leaving nothing for the other ${count} categories.`
-            + `\n\nRaise the income, or lower a fixed amount, the debt payment or savings.`
-        );
+        return alert(`Fixed costs (${money(plan.reserved)}) use up the ${money(plan.toSpend)} left for spending.`);
     }
 
-    let question;
-    if (plan.available === null) {
-        question = `Overwrite ${count} monthly goals with the average spend before ${month}?`
-            + (plan.reserved ? `\n\nFixed costs (${money(plan.reserved)}) stay as they are.` : '');
-    } else {
-        const offTop = [
-            [goals[DEBT_PAYMENT_KEY], 'debt payment'],
-            [goals[SAVINGS_KEY], 'savings'],
-            [plan.reserved, 'fixed costs']
-        ].filter(([amount]) => amount).map(([amount, what]) => `${money(amount)} ${what}`);
-
-        question = `Split ${money(plan.available)} across ${count} monthly goals, in proportion to spending before ${month}?`
-            + `\n\n${money(goals[INCOME_KEY])} income` + (offTop.length ? `, less ${listing(offTop)}.` : '.')
-            + (plan.reserved ? ' Fixed costs stay as they are.' : '')
-            + `\n\nPast spending above fixed costs averaged ${money(plan.historic)} a month,`
-            + ` so each goal is scaled by ${plan.scale.toFixed(2)}x.`;
-    }
+    // It overwrites goals, so it asks first - in one line.
+    const question = plan.available === null
+        ? `Set ${count} monthly goals to their average before ${month}?`
+        : `Split ${money(plan.available)} across ${count} monthly goals by past spending?`;
     if (!confirm(question)) return;
 
     autofillBtn.disabled = true;

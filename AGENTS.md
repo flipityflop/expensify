@@ -1,0 +1,158 @@
+# Notes for agents
+
+Read this before changing anything under `public/`. Schema, API routes and
+setup are in [README.md](README.md).
+
+## UI text: none unless it earns its place
+
+The owner does not want explainer text in the UI unless it is very important
+or genuinely helpful. How a feature works belongs in this file, the README or
+code comments, not on the page.
+
+**Fine on the page**, each kept to a few words:
+
+- Labels, headings, column names, button text.
+- Numbers and dates: `Fixed $245.00 · Unassigned $0.00`, `in 3 days`.
+- Short empty states: `No cards yet.`
+- Warnings that something is wrong or about to cost money: goals over what is
+  left for spending, fixed expenses over a category's goal, a fee renewing
+  within 30 days.
+- A one-line confirm before overwriting data, and one-line error alerts.
+
+**Not on the page**:
+
+- Section notes or subtitles under a heading.
+- Hint lines under a label.
+- `e.g. …` placeholders.
+- Long `title` tooltips.
+- "How this works" sentences.
+- Multi-paragraph confirm dialogs.
+- Saying a value is "not set". Leave it out instead: a card with no APR shows
+  no APR, and a fixed expense with no due date shows no date.
+
+`scripts/test-fixed-expenses.js` and `scripts/test-cards.js` assert some of the
+removed text stays out.
+
+## How the pages work
+
+What the UI used to say, and the reasoning behind it.
+
+### Budget
+
+**Monthly plan.** Income − Debt payment − Savings = Left for spending.
+
+- Debt payment is meant for card balances carried over from earlier months.
+  Those purchases were already counted as spending in the month they were
+  made, so paying the card off is not new spending. It comes off the income
+  instead.
+- The three amounts are reserved rows in `budget_goals`:
+  - `__spending_budget__` is the income. It keeps the name from when the
+    figure was "income to spend", so the saved amount carried over.
+  - `__debt_payment__`
+  - `__savings__`
+- The figures line under the plan:
+  - **Fixed** = pinned monthly goals + fixed expenses in unpinned monthly
+    categories.
+  - **Unassigned** = left for spending − all monthly goals.
+  - It reads **Goals over by** in red when the goals add up to more than is
+    left for spending.
+
+**Autofill goals.** It takes left for spending, less fixed costs, and splits
+it across the unpinned monthly categories.
+
+- Each category's share is in proportion to its average monthly spend before
+  the selected month, counting only what it spent above its own fixed
+  expenses. The fixed part is added back on top, unscaled.
+- It never writes a pinned category or a yearly goal.
+- With no income set, it uses the raw averages.
+- It refuses when fixed costs use up everything left for spending.
+- Yearly goals are **not** taken off the income first. The owner reverted that
+  (35a291e). Ask before bringing it back.
+
+**Fixed column.** A tick pins the category's whole goal as a fixed cost.
+Autofill leaves it alone and sizes everything else around it.
+
+**Fixed expenses inside a category.** Click the category name (▸) to open its
+row. The `N fixed` badge counts what is inside.
+
+- Each fixed expense is monthly or yearly.
+- A due date is optional: a day of the month for a monthly one, or a month
+  and day for a yearly one.
+- In a monthly category, a yearly amount counts at a twelfth. In a yearly
+  category, a monthly amount counts twelve times.
+- Adding one raises the category's goal to cover its fixed expenses if the
+  goal is unset or below them. It never lowers a goal.
+
+**Fixed expenses schedule.** Every fixed expense, by next due date from today;
+ones with no date go last.
+
+- Rows due within 7 days are amber.
+- A due day past the end of a short month falls on that month's last day.
+- The monthly total counts yearly ones at a twelfth.
+
+**Yearly goals.**
+
+- Tzedakah runs on the Jewish year, 1 Tishrei to 29 Elul. The calculation is
+  `public/hebrew-calendar.js`: plain arithmetic, not `Intl`.
+- Travel runs January to December.
+- Each row shows the period it covers.
+- For the selected month, the year is the one containing today if that month
+  is the current one, otherwise the one containing its last day.
+
+**Progress bar.** Monthly goals plus a twelfth of each yearly goal, against
+this month's spending.
+
+### Cards
+
+**Order.** Highest APR first, since extra payments save the most there. Cards
+with no APR go last; ties go to the larger balance.
+
+**Interest a month.** Roughly balance × APR / 12.
+
+- It's an estimate: cards charge daily on the average balance.
+- Nothing is charged on a balance paid in full by the due date.
+
+**Annual fee renewal.**
+
+- A stored date still in the future is shown as it is. A waived first year
+  can put it more than a year out.
+- A date already passed rolls forward a year at a time, and 29 February
+  becomes the 28th outside leap years.
+- Amber within 30 days: the time to ask for a retention offer or cancel
+  before the fee posts.
+
+**Balance date.** Typing a new balance sets its as-of date to today.
+
+**Debt tracker.** The bar shows what is still owed, so it empties as the debt
+is paid down. Payoff adds to the paid amount and moves the as-of date.
+
+### Tab bar
+
+- On a phone each tab keeps at least 30% of the width, so the bar slides
+  sideways instead of squeezing.
+- It comes to rest with a tab centred, and fades at whichever edge has more
+  tabs past it.
+- `auth.js` centres the current page's tab on load.
+
+## Working in this repo
+
+- **Script loading.** Pages load classic scripts that share one global scope,
+  in the order the HTML lists them.
+  - `categories.js` is the only category list.
+  - `helpers.js` has `money()`, `escapeHtml()`, `isoDate()` and the
+    modal-closing listener.
+  - Top-level names must be unique across every script a page loads.
+- **Tests.** `npm test` runs the shipped files in a `vm` with a stub DOM, with
+  no database. Each page test loads that page's scripts together, so a name
+  clash fails there first.
+  - Objects and arrays built inside the vm have their own prototypes, so pass
+    them out as JSON before `deepStrictEqual`.
+- **Running without Turso.**
+  `TURSO_DATABASE_URL=file:/tmp/x.db TURSO_AUTH_TOKEN=x APP_PASSWORD=pw node server.js`.
+  Chart.js on the Expenses page comes from a CDN and may not load in a
+  sandbox.
+- **Server conventions.**
+  - Tables are created on cold start with `CREATE TABLE IF NOT EXISTS`.
+    Columns are added with `try { ALTER TABLE … } catch {}`.
+  - Each new resource follows the debts routes: one validation function
+    returning `{ error }` or `{ args }`, shared by POST and PUT.
