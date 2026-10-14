@@ -169,6 +169,7 @@ expensify-site/
 │   ├── backup.js          # Dump expenses to backups/*.json
 │   ├── restore.js         # Restore from a dump (dry-run by default)
 │   ├── migrate-v3.js      # Category remap + notes split (dry-run by default)
+│   ├── migrate-debts-to-cards.js  # One-time: card debts -> credit_cards (dry-run by default)
 │   ├── test-csv-roundtrip.js
 │   ├── test-hebrew-calendar.js
 │   ├── test-budget.js
