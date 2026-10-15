@@ -42,7 +42,7 @@ const CATEGORIES = [
 // sub-types, a separate dimension only reachable behind that toggle.
 const INCOME_CATEGORIES = ['work', 'sidejob', 'gift', 'investment', 'other'];
 
-// Budget goals are monthly for everything except these two, which are lumpy
+// Budgets are monthly for everything except these two, which are lumpy
 // month to month and only make sense against a full year.
 const YEARLY_CATEGORIES = ['Tzedakah', 'Travel'];
 

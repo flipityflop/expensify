@@ -59,7 +59,7 @@ const call = expr => vm.runInContext(`out = ${expr}; out`, ctx);
 assert.strictEqual(call(`averageMonthly('Groceries', '2026-04')`), 200);
 
 // 60 spent in one month, but three months elapsed -> 20, not 60. A month with
-// no Gifts spending is still a month the goal had to cover.
+// no Gifts spending is still a month the budget had to cover.
 assert.strictEqual(call(`averageMonthly('Gifts', '2026-04')`), 20);
 
 // A category with no history averages to 0, not null - null means "no history
@@ -200,10 +200,8 @@ const spend = call(`expenses.filter(e => !e.is_positive && e.expense_date.starts
     .reduce((s, e) => s + Math.abs(e.amount), 0)`);
 assert.strictEqual(spend, 170);
 
-// The reserved keys must never be rendered or budgeted as a category, and the
-// income is still read from the key it was first saved under.
+// The reserved keys must never be rendered or budgeted as a category.
 assert.ok(!call(`PLAN_KEYS.some(k => CATEGORIES.includes(k))`), 'a plan key leaked into CATEGORIES');
-assert.strictEqual(call(`INCOME_KEY`), '__spending_budget__');
 
 // ---- money ---------------------------------------------------------------
 assert.strictEqual(call(`money(1234.5)`), '$1234.50');

@@ -35,7 +35,7 @@ removed text stays out.
 
 ## How the pages work
 
-What the UI used to say, and the reasoning behind it.
+How each page works, and why.
 
 ### Budget
 
@@ -46,8 +46,7 @@ What the UI used to say, and the reasoning behind it.
   made, so paying the card off is not new spending. It comes off the income
   instead.
 - The three amounts are reserved rows in `budget_goals`:
-  - `__spending_budget__` is the income. It keeps the name from when the
-    figure was "income to spend", so the saved amount carried over.
+  - `__income__`
   - `__debt_payment__`
   - `__savings__`
 - The figures line under the plan:
@@ -56,7 +55,7 @@ What the UI used to say, and the reasoning behind it.
     when Budget is more than is left for spending.
   - **Flexible at N%** appears when targets squeezed the other groups.
 
-**Monthly budgets are worked out, not typed.** For each monthly group
+**Monthly budgets are worked out.** For each monthly group
 (`monthlyBudgets()` in `budget.js`):
 
 - **Fixed** = its fixed expenses.
@@ -85,13 +84,6 @@ budget.
   negative and shows red.
 - Yearly goals are **not** taken off the income before fitting. The owner
   reverted that (35a291e). Ask before bringing it back.
-
-**Removed:** pinning a whole category, typed monthly goals, and the Autofill
-button.
-
-- Older databases still have `budget_goals.fixed` (the pin) and the old
-  monthly goal rows. Nothing reads them.
-- A group that used to be pinned, like Rent, should be a fixed expense now.
 
 **Fixed expenses inside a category.** Click the category name (▸) to open its
 row. The `N fixed` badge counts what is inside.

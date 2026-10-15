@@ -49,9 +49,6 @@ const initPromise = (async () => {
         period TEXT NOT NULL DEFAULT 'monthly',
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
-    // Databases from before monthly budgets were worked out still carry a
-    // `fixed` column, the old pin on a whole category. Nothing reads or writes
-    // it; it is left in place rather than dropped on a cold start.
 
     // A monthly group's budget set by hand for one month - "$500 on clothes
     // this October". Every other monthly group fits around it on the budget
@@ -80,8 +77,7 @@ const initPromise = (async () => {
     )`);
 
     // A named recurring cost inside a category - Phone and Internet inside
-    // Bills & Insurance - so part of a category can be fixed without pinning
-    // the whole of it. `amount` is per `frequency`. `due_day` is the day of the
+    // Bills & Insurance. `amount` is per `frequency`. `due_day` is the day of the
     // month it falls due, and a yearly one also has `due_month`; both are null
     // when it has no due date.
     await db.execute(`CREATE TABLE IF NOT EXISTS fixed_expenses (

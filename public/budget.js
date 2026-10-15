@@ -20,10 +20,7 @@ const expanded = new Set(); // categories whose rows are open to show their fixe
 // spent - is stored as reserved rows in budget_goals rather than a table of
 // its own: that table is already key -> amount with an upsert route, and the
 // leading underscores keep these out of the real categories the page renders.
-//
-// INCOME_KEY keeps the name from when the figure was "income to spend", so the
-// amount already saved carries over as the income.
-const INCOME_KEY = '__spending_budget__';
+const INCOME_KEY = '__income__';
 const DEBT_PAYMENT_KEY = '__debt_payment__';
 const SAVINGS_KEY = '__savings__';
 const PLAN_KEYS = [INCOME_KEY, DEBT_PAYMENT_KEY, SAVINGS_KEY];
@@ -179,10 +176,9 @@ function fixedItemsIn(category) {
     return fixedItems.filter(item => item.category === category);
 }
 
-// What a fixed expense comes to over its category's goal period: a month's
-// worth against a monthly goal, a year's against a yearly one. A yearly bill
-// in a monthly category counts at a twelfth - the goal is the same every
-// month, so the bill is spread across all of them.
+// What a fixed expense comes to over its category's period: a month's worth
+// in a monthly budget, a year's against a yearly goal. A yearly bill in a
+// monthly category counts at a twelfth, spread across every month.
 function fixedItemAmount(item) {
     const yearlyGoal = goalPeriod(item.category) === 'yearly';
     if (item.frequency === 'yearly') return yearlyGoal ? item.amount : item.amount / 12;
@@ -195,7 +191,8 @@ function fixedItemsTotal(category) {
 
 // ---- monthly budgets --------------------------------------------------------
 
-// Every monthly group's budget for a month, worked out rather than typed.
+// Every monthly group's budget for a month, from its fixed expenses and past
+// spending.
 //
 // A group's usual budget is its fixed expenses plus what it has averaged a
 // month on top of them. Past spending already includes those fixed bills, so
@@ -365,8 +362,8 @@ function render() {
     yearlyTbody.innerHTML = yearly.map(c => yearlyRowHtml(c, month)).join('');
 
     // Which month the monthly table covers. Each yearly row carries its own
-    // span, since Tzedakah's year and Travel's no longer line up. Mid-month
-    // date, so no timezone edge case.
+    // span, since Tzedakah's year and Travel's differ. Mid-month date, so no
+    // timezone edge case.
     const [year, mon] = month.split('-');
     const label = new Date(year, mon - 1, 15).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
     monthlyHeading.textContent = `Monthly budget — ${label}`;

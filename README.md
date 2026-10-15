@@ -102,8 +102,7 @@ CREATE TABLE credit_cards (
 
 The monthly plan on the budget page is three reserved rows in `budget_goals`,
 kept out of the category list by their leading underscores:
-`__spending_budget__` (the income - named from when it was "income to spend"),
-`__debt_payment__` and `__savings__`.
+`__income__`, `__debt_payment__` and `__savings__`.
 
 The schema is created on cold start via `CREATE TABLE IF NOT EXISTS` in `server.js`.
 
@@ -182,6 +181,7 @@ expensify-site/
 │   ├── restore.js         # Restore from a dump (dry-run by default)
 │   ├── migrate-v3.js      # Category remap + notes split (dry-run by default)
 │   ├── migrate-debts-to-cards.js  # One-time: card debts -> credit_cards (dry-run by default)
+│   ├── cleanup-budget-goals.js    # One-time: drop unused budget_goals rows and column (dry-run by default)
 │   ├── test-csv-roundtrip.js
 │   ├── test-hebrew-calendar.js
 │   ├── test-budget.js
@@ -216,7 +216,7 @@ expensify-site/
 node scripts/migrate-v3.js --selftest   # category/merchant mapping rules
 node scripts/test-csv-roundtrip.js      # export -> import survives a round trip
 node scripts/test-hebrew-calendar.js    # Rosh Hashanah against published dates
-node scripts/test-budget.js             # autofill split, plan, fixed expenses, Tzedakah's year
+node scripts/test-budget.js             # worked-out budgets, targets, plan, Tzedakah's year
 node scripts/test-fixed-expenses.js     # next due dates, opened rows, schedule
 node scripts/test-cards.js              # card interest, fee renewal, order, totals
 node scripts/test-debt.js               # debt remaining + bar arithmetic
