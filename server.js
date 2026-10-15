@@ -3,7 +3,7 @@ const express = require('express');
 const { createClient } = require('@libsql/client');
 const cors = require('cors');
 const path = require('path');
-const { CATEGORIES } = require('./public/categories.js');
+const { CATEGORIES, goalPeriod } = require('./public/categories.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,13 +47,23 @@ const initPromise = (async () => {
         category TEXT NOT NULL UNIQUE,
         amount REAL NOT NULL,
         period TEXT NOT NULL DEFAULT 'monthly',
-        fixed INTEGER DEFAULT 0,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
-    // Rent does not shrink because there is less to spend. A fixed goal is set
-    // by hand and autofill works around it, never over it. Orthogonal to
-    // `period` - a goal can be fixed and yearly.
-    try { await db.execute('ALTER TABLE budget_goals ADD COLUMN fixed INTEGER DEFAULT 0'); } catch (_) {}
+    // Databases from before monthly budgets were worked out still carry a
+    // `fixed` column, the old pin on a whole category. Nothing reads or writes
+    // it; it is left in place rather than dropped on a cold start.
+
+    // A monthly group's budget set by hand for one month - "$500 on clothes
+    // this October". Every other monthly group fits around it on the budget
+    // page. No row means the worked-out budget.
+    await db.execute(`CREATE TABLE IF NOT EXISTS budget_targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT NOT NULL,
+        month TEXT NOT NULL,
+        amount REAL NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (category, month)
+    )`);
 
     // `total` is what was originally owed and `paid` is how much of it has been
     // cleared, so remaining is total - paid. Storing the running total rather
@@ -239,26 +249,80 @@ app.get('/api/budget-goals', requireAuth, async (req, res) => {
     }
 });
 
-// Upsert one goal. There is no other update route in this app - if you add one,
-// this is the shape to copy.
+// Upsert one goal: a yearly goal, or one of the plan's reserved rows.
 app.put('/api/budget-goals', requireAuth, async (req, res) => {
     await initPromise;
-    const { category, amount, period, fixed } = req.body;
+    const { category, amount, period } = req.body;
     if (!category || amount === undefined || amount === null || isNaN(Number(amount))) {
         return res.status(400).json({ error: 'category and a numeric amount are required' });
     }
     try {
         await db.execute({
-            sql: `INSERT INTO budget_goals (category, amount, period, fixed, updated_at)
-                  VALUES (?, ?, ?, ?, ?)
+            sql: `INSERT INTO budget_goals (category, amount, period, updated_at)
+                  VALUES (?, ?, ?, ?)
                   ON CONFLICT(category) DO UPDATE SET
                       amount = excluded.amount,
                       period = excluded.period,
-                      fixed = excluded.fixed,
                       updated_at = excluded.updated_at`,
-            args: [category, Number(amount), period === 'yearly' ? 'yearly' : 'monthly', fixed ? 1 : 0, new Date().toISOString()]
+            args: [category, Number(amount), period === 'yearly' ? 'yearly' : 'monthly', new Date().toISOString()]
         });
         res.json({ message: 'Budget goal saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Budget targets
+//
+// Only a monthly group takes a target; a yearly goal is already typed by hand.
+function targetKey({ category, month }) {
+    if (!CATEGORIES.includes(category) || goalPeriod(category) === 'yearly') {
+        return { error: 'category must be one of the monthly expense categories' };
+    }
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month || '')) return { error: 'month must be YYYY-MM' };
+    return { args: [category, month] };
+}
+
+app.get('/api/budget-targets', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM budget_targets ORDER BY month, category');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/budget-targets', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = targetKey(req.body);
+    if (error) return res.status(400).json({ error });
+    const amount = req.body.amount;
+    if (isBlank(amount) || !(Number(amount) >= 0)) return res.status(400).json({ error: 'amount must be 0 or more' });
+    try {
+        await db.execute({
+            sql: `INSERT INTO budget_targets (category, month, amount, updated_at)
+                  VALUES (?, ?, ?, ?)
+                  ON CONFLICT(category, month) DO UPDATE SET
+                      amount = excluded.amount,
+                      updated_at = excluded.updated_at`,
+            args: [...args, Number(amount), new Date().toISOString()]
+        });
+        res.json({ message: 'Target saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Clearing a target that is not there is not an error: either way there is
+// none afterwards.
+app.delete('/api/budget-targets', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = targetKey(req.query);
+    if (error) return res.status(400).json({ error });
+    try {
+        await db.execute({ sql: 'DELETE FROM budget_targets WHERE category = ? AND month = ?', args });
+        res.json({ message: 'Target cleared' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -2,7 +2,7 @@
 // inside Bills & Insurance - each with an optional due date.
 //
 // Loaded after helpers.js and budget.js - classic scripts share one top-level
-// scope. The list itself (`fixedItems`) and the sums autofill needs live in
+// scope. The list itself (`fixedItems`) and the budget sums that use it live in
 // budget.js; this file is the add/edit modal, the list under an opened
 // category row, and the schedule of when each one is due. budget.js calls
 // fixedDetailHtml() and renderSchedule() from render(), which only runs once
@@ -95,13 +95,16 @@ function perPeriod(item) {
 
 // ---- under an opened category row ------------------------------------------
 
+// A monthly row already shows its fixed and flexible parts as columns, so
+// only a yearly row - whose goal is typed - sums them up here.
 function fixedDetailHtml(category) {
     const items = fixedItemsIn(category);
     const total = fixedItemsTotal(category);
     const goal = goals[category];
+    const yearly = goalPeriod(category) === 'yearly';
 
     let summary = '';
-    if (items.length) {
+    if (items.length && yearly) {
         if (goal === undefined) summary = `Fixed ${money(total)}`;
         else if (total > goal + 0.005) summary = `<span class="over">Fixed ${money(total)} is over the ${money(goal)} goal</span>`;
         else summary = `Fixed ${money(total)} · Flexible ${money(goal - total)}`;
@@ -117,7 +120,7 @@ function fixedDetailHtml(category) {
 
     return `
         <tr class="detail-row">
-            <td colspan="6">
+            <td colspan="${yearly ? 5 : 7}">
                 ${items.length ? `<ul class="fixed-items">${list}</ul>` : ''}
                 <div class="fixed-items-foot">
                     <span>${summary}</span>
@@ -212,10 +215,11 @@ async function reloadFixedItems() {
     fixedItems = await response.json();
 }
 
-// A category's goal has to at least cover its fixed expenses, so one that is
-// unset or below them is raised to match. Never lowered: whatever was above
-// them is the flexible part.
+// A yearly goal has to at least cover its fixed expenses, so one that is unset
+// or below them is raised to match. Never lowered: whatever was above them is
+// the flexible part. A monthly budget is worked out from them already.
 async function coverFixedItems(category) {
+    if (goalPeriod(category) !== 'yearly') return;
     const total = Math.round(fixedItemsTotal(category) * 100) / 100;
     if (goals[category] === undefined || goals[category] < total) await putGoal(category, total);
 }

@@ -24,20 +24,8 @@
         .under { color: #22c55e; font-weight: 600; }
         .over  { color: #ef4444; font-weight: 600; }
 
-        /* Fixed rows read as "autofill will not touch this". */
-        .fixed-row td:first-child::after {
-            content: " 📌";
-            font-size: 0.75rem;
-        }
-
-        .fixed-row { background: #171c28; }
-
-        td input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: #67e8f9;
-        }
+        /* A budget set by a target rather than worked out. */
+        .targeted { color: #67e8f9; font-weight: 600; }
 
         .budget-progress-head {
             display: flex;
@@ -245,7 +233,6 @@
                         <td>= Left for spending</td>
                         <td>
                             <span id="plan-left">—</span>
-                            <button type="button" id="autofill" class="small-btn">Autofill goals</button>
                         </td>
                     </tr>
                 </tfoot>
@@ -253,17 +240,18 @@
         </div>
         <p class="plan-breakdown" id="plan-breakdown"></p>
 
-        <h2 class="section-title" id="monthly-heading">Monthly goals</h2>
+        <h2 class="section-title" id="monthly-heading">Monthly budget</h2>
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
                         <th>Category</th>
-                        <th>Goal</th>
-                        <th>Actual</th>
-                        <th>Difference</th>
-                        <th>Set Goal</th>
-                        <th title="A fixed cost. Autofill leaves it alone and sizes everything else around it.">Fixed</th>
+                        <th>Fixed</th>
+                        <th>Flexible</th>
+                        <th>Budget</th>
+                        <th>Spent</th>
+                        <th>Remaining</th>
+                        <th>Target</th>
                     </tr>
                 </thead>
                 <tbody id="budget-tbody"></tbody>
@@ -281,7 +269,6 @@
                         <th>Actual</th>
                         <th>Difference</th>
                         <th>Set Goal</th>
-                        <th title="A fixed cost. Autofill leaves it alone and sizes everything else around it.">Fixed</th>
                     </tr>
                 </thead>
                 <tbody id="yearly-tbody"></tbody>

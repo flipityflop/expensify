@@ -3,7 +3,6 @@ const tbody = document.getElementById('budget-tbody');
 const tfoot = document.getElementById('budget-tfoot');
 const yearlyTbody = document.getElementById('yearly-tbody');
 const monthlyHeading = document.getElementById('monthly-heading');
-const autofillBtn = document.getElementById('autofill');
 const planLeft = document.getElementById('plan-left');
 const planBreakdown = document.getElementById('plan-breakdown');
 const progressLabel = document.getElementById('progress-label');
@@ -12,8 +11,8 @@ const progressFill = document.getElementById('budget-progress-fill');
 const loadingDiv = document.getElementById('loading');
 
 let expenses = [];
-let goals = {}; // category -> goal amount
-let fixed = {}; // category -> true when the whole goal is a fixed cost, set by hand
+let goals = {}; // category -> goal amount: yearly goals and the plan; monthly budgets are worked out
+let targets = {}; // 'YYYY-MM' -> { category -> amount }: a monthly group's budget set by hand for one month
 let fixedItems = []; // named fixed expenses inside categories; see fixed-expenses.js
 const expanded = new Set(); // categories whose rows are open to show their fixed expenses
 
@@ -46,7 +45,6 @@ document.addEventListener('DOMContentLoaded', function() {
     monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     monthInput.addEventListener('change', render);
-    autofillBtn.addEventListener('click', autofill);
     Object.entries(planInputs).forEach(([key, input]) => {
         input.addEventListener('change', () => {
             // A cleared field puts the stored amount back, as the goal inputs do.
@@ -55,11 +53,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     // 'change' on a number input already means blur-with-a-new-value or Enter.
-    // Delegated from the document so both tables are covered by one listener.
+    // Delegated, as the rows are rebuilt on every render.
     document.addEventListener('change', e => {
         const data = e.target.dataset;
         if (!data) return;
-        if (data.fixedFor) toggleFixed(data.fixedFor, e.target.checked);
+        if (data.target) saveTarget(data.target, e.target.value);
         else if (data.category) saveGoal(data.category, e.target.value);
     });
     // The whole category name is the toggle, so it is an easy target on a phone.
@@ -77,25 +75,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function load() {
     try {
-        const [expensesRes, goalsRes, itemsRes] = await Promise.all([
+        const responses = await Promise.all([
             fetch('/api/expenses', { headers: getAuthHeaders() }),
             fetch('/api/budget-goals', { headers: getAuthHeaders() }),
-            fetch('/api/fixed-expenses', { headers: getAuthHeaders() })
+            fetch('/api/fixed-expenses', { headers: getAuthHeaders() }),
+            fetch('/api/budget-targets', { headers: getAuthHeaders() })
         ]);
 
-        if ([expensesRes, goalsRes, itemsRes].some(r => r.status === 401)) {
+        if (responses.some(r => r.status === 401)) {
             localStorage.removeItem('authToken');
             window.location.href = '/login.html';
             return;
         }
-        if (!expensesRes.ok || !goalsRes.ok || !itemsRes.ok) throw new Error('Failed to load budget');
+        if (responses.some(r => !r.ok)) throw new Error('Failed to load budget');
 
+        const [expensesRes, goalsRes, itemsRes, targetsRes] = responses;
         expenses = await expensesRes.json();
         fixedItems = await itemsRes.json();
-        (await goalsRes.json()).forEach(goal => {
-            goals[goal.category] = goal.amount;
-            if (goal.fixed) fixed[goal.category] = true;
-        });
+        (await goalsRes.json()).forEach(goal => { goals[goal.category] = goal.amount; });
+        (await targetsRes.json()).forEach(t => { (targets[t.month] ||= {})[t.category] = t.amount; });
 
         PLAN_KEYS.forEach(key => {
             if (goals[key] !== undefined) planInputs[key].value = goals[key];
@@ -195,23 +193,92 @@ function fixedItemsTotal(category) {
     return fixedItemsIn(category).reduce((sum, item) => sum + fixedItemAmount(item), 0);
 }
 
-// What autofill must leave alone in a monthly category: the whole goal when
-// the category is pinned, otherwise its fixed expenses.
-function reservedFor(category) {
-    return fixed[category] ? (goals[category] || 0) : fixedItemsTotal(category);
+// ---- monthly budgets --------------------------------------------------------
+
+// Every monthly group's budget for a month, worked out rather than typed.
+//
+// A group's usual budget is its fixed expenses plus what it has averaged a
+// month on top of them. Past spending already includes those fixed bills, so
+// only the average above them is flexible - never below nothing, so a group
+// whose fixed bills outrun its history budgets exactly its fixed bills. With
+// no earlier month to average, the flexible part is nothing.
+//
+// A group with a target for the month takes the target instead, and the rest
+// fit around it: once the targets and everyone else's fixed bills are taken
+// out of what is left for spending, the other groups' flexible parts shrink
+// by the same proportion until they fit. They never grow past their averages
+// - spare money stays unassigned. Fixed bills never shrink. With no income
+// set there is nothing to fit into, so nothing shrinks.
+//
+// Returns { rows: { category -> { fixed, flexible, budget, spent, target } },
+// totals, scale }, where scale is how far the flexible parts shrank (1 = not).
+function monthlyBudgets(month) {
+    const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
+    const set = targets[month] || {};
+
+    const rows = {};
+    for (const c of monthly) {
+        const fixedPart = fixedItemsTotal(c);
+        const average = averageMonthly(c, month);
+        rows[c] = {
+            fixed: fixedPart,
+            usual: average === null ? 0 : Math.max(0, Math.round((average - fixedPart) * 100) / 100),
+            target: set[c],
+            spent: actual(c, month)
+        };
+    }
+
+    const free = monthly.filter(c => rows[c].target === undefined);
+    const wanted = free.reduce((sum, c) => sum + rows[c].usual, 0);
+    const left = leftForSpending();
+    let scale = 1;
+    if (left !== null && wanted > 0) {
+        const room = left
+            - monthly.reduce((sum, c) => sum + (rows[c].target ?? 0), 0)
+            - free.reduce((sum, c) => sum + rows[c].fixed, 0);
+        scale = Math.max(0, Math.min(1, room / wanted));
+    }
+
+    const totals = { fixed: 0, flexible: 0, budget: 0, spent: 0 };
+    for (const c of monthly) {
+        const r = rows[c];
+        if (r.target !== undefined) {
+            r.budget = r.target;
+            r.flexible = r.target - r.fixed; // below 0 when the target is under the fixed bills
+        } else {
+            // Shrunk amounts round down, so the cents cannot add up past what
+            // is left; the epsilon keeps 304.9999999 from flooring to 304.99.
+            r.flexible = scale < 1 ? Math.floor(r.usual * scale * 100 + 1e-6) / 100 : r.usual;
+            r.budget = r.fixed + r.flexible;
+        }
+        delete r.usual;
+        for (const key of Object.keys(totals)) totals[key] += r[key];
+    }
+
+    return { rows, totals, scale };
+}
+
+// The progress bar's budget: every monthly budget, plus a twelfth of each
+// yearly goal - a whole year's Travel against one month would mean nothing.
+function progressBudget(budgets) {
+    const yearly = CATEGORIES
+        .filter(c => goalPeriod(c) === 'yearly')
+        .reduce((sum, c) => sum + (goals[c] || 0) / 12, 0);
+    return budgets.totals.budget + yearly;
 }
 
 // ---- the plan -------------------------------------------------------------
 
-// Income less what comes off the top. null when no income is set, which is
-// also what tells autofill to use the raw averages.
+// Income less what comes off the top. null when no income is set.
 function leftForSpending() {
     const income = goals[INCOME_KEY];
     if (!income) return null;
     return income - (goals[DEBT_PAYMENT_KEY] || 0) - (goals[SAVINGS_KEY] || 0);
 }
 
-function renderPlan() {
+// Whether the monthly budgets fit in what is left for spending, and how far
+// the targets squeezed everything else.
+function renderPlan(budgets) {
     const left = leftForSpending();
     planLeft.textContent = left === null ? '—' : money(left);
     planLeft.className = left !== null && left < 0 ? 'over' : '';
@@ -221,13 +288,10 @@ function renderPlan() {
         return;
     }
 
-    // Unassigned is what is left for spending that no monthly goal has yet.
-    const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
-    const reserved = monthly.reduce((sum, c) => sum + reservedFor(c), 0);
-    const spare = left - monthly.reduce((sum, c) => sum + (goals[c] || 0), 0);
-
-    planBreakdown.innerHTML = `Fixed ${money(reserved)} · `
-        + (spare >= 0 ? `Unassigned ${money(spare)}` : `<span class="over">Goals over by ${money(-spare)}</span>`);
+    const spare = left - budgets.totals.budget;
+    planBreakdown.innerHTML = `Budget ${money(budgets.totals.budget)} · `
+        + (spare > -0.005 ? `Unassigned ${money(Math.max(0, spare))}` : `<span class="over">Over by ${money(-spare)}</span>`)
+        + (budgets.scale < 1 ? ` · Flexible at ${Math.round(budgets.scale * 100)}%` : '');
 }
 
 // ---- the tables -----------------------------------------------------------
@@ -243,29 +307,49 @@ function yearLabel(category, month) {
     return `${label} · ${day(start)} – ${day(end, -1)}`;
 }
 
-// `showFixed` is off for the yearly table: autofill never touches those, so a
-// checkbox there would do nothing. An open row is followed by its fixed
-// expenses, from fixed-expenses.js.
-function rowHtml(category, month, showFixed) {
-    const goal = goals[category];
-    const spent = actual(category, month);
-    const isFixed = !!fixed[category];
+// The category name is the toggle that opens the row onto its fixed
+// expenses; a yearly row also shows the span its year covers.
+function categoryCell(category, month) {
     const count = fixedItemsIn(category).length;
     const open = expanded.has(category);
-
     return `
-        <tr${isFixed ? ' class="fixed-row"' : ''}>
-            <td>
-                <button type="button" class="expand-btn" data-expand="${category}" aria-expanded="${open}"><span class="caret">${open ? '▾' : '▸'}</span>${category}${count ? `<span class="item-count">${count} fixed</span>` : ''}</button>
-                ${goalPeriod(category) === 'yearly' ? `<span class="period-note">${yearLabel(category, month)}</span>` : ''}
-            </td>
+        <td>
+            <button type="button" class="expand-btn" data-expand="${category}" aria-expanded="${open}"><span class="caret">${open ? '▾' : '▸'}</span>${category}${count ? `<span class="item-count">${count} fixed</span>` : ''}</button>
+            ${goalPeriod(category) === 'yearly' ? `<span class="period-note">${yearLabel(category, month)}</span>` : ''}
+        </td>`;
+}
+
+// A target shows in the last column and lights the budget it sets. An open
+// row is followed by its fixed expenses, from fixed-expenses.js.
+function monthlyRowHtml(category, month, row) {
+    const { fixed: fixedPart, flexible, budget, spent, target } = row;
+    return `
+        <tr>
+            ${categoryCell(category, month)}
+            <td>${fixedPart ? money(fixedPart) : '—'}</td>
+            <td${flexible < 0 ? ' class="over"' : ''}>${money(flexible)}</td>
+            <td${target !== undefined ? ' class="targeted"' : ''}>${money(budget)}</td>
+            <td>${money(spent)}</td>
+            ${diffCell(budget - spent)}
+            <td><input type="number" class="goal-input" step="0.01" min="0" data-target="${category}" value="${target ?? ''}"></td>
+        </tr>
+        ${expanded.has(category) ? fixedDetailHtml(category) : ''}
+    `;
+}
+
+// Yearly goals are still typed: maaser is a rule, not an average.
+function yearlyRowHtml(category, month) {
+    const goal = goals[category];
+    const spent = actual(category, month);
+    return `
+        <tr>
+            ${categoryCell(category, month)}
             <td>${goal === undefined ? '—' : money(goal)}</td>
             <td>${money(spent)}</td>
             ${diffCell(goal === undefined ? null : goal - spent)}
             <td><input type="number" class="goal-input" step="0.01" min="0" data-category="${category}" value="${goal ?? ''}"></td>
-            <td>${showFixed ? `<input type="checkbox" data-fixed-for="${category}"${isFixed ? ' checked' : ''}>` : ''}</td>
         </tr>
-        ${open ? fixedDetailHtml(category) : ''}
+        ${expanded.has(category) ? fixedDetailHtml(category) : ''}
     `;
 }
 
@@ -276,55 +360,48 @@ function render() {
     const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
     const yearly = CATEGORIES.filter(c => goalPeriod(c) === 'yearly');
 
-    tbody.innerHTML = monthly.map(c => rowHtml(c, month, true)).join('');
-    yearlyTbody.innerHTML = yearly.map(c => rowHtml(c, month, false)).join('');
+    const budgets = monthlyBudgets(month);
+    tbody.innerHTML = monthly.map(c => monthlyRowHtml(c, month, budgets.rows[c])).join('');
+    yearlyTbody.innerHTML = yearly.map(c => yearlyRowHtml(c, month)).join('');
 
     // Which month the monthly table covers. Each yearly row carries its own
     // span, since Tzedakah's year and Travel's no longer line up. Mid-month
     // date, so no timezone edge case.
     const [year, mon] = month.split('-');
     const label = new Date(year, mon - 1, 15).toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
-    monthlyHeading.textContent = `Monthly goals — ${label}`;
+    monthlyHeading.textContent = `Monthly budget — ${label}`;
 
     // Totals cover the monthly table only; a year's goal against a month's
     // spending would not add up to anything meaningful.
-    const goalTotal = monthly.reduce((sum, c) => sum + (goals[c] || 0), 0);
-    const actualTotal = monthly.reduce((sum, c) => sum + actual(c, month), 0);
-
+    const totals = budgets.totals;
     tfoot.innerHTML = `
         <tr>
-            <td>Monthly totals</td>
-            <td>${money(goalTotal)}</td>
-            <td>${money(actualTotal)}</td>
-            ${diffCell(goalTotal - actualTotal)}
-            <td></td>
+            <td>Totals</td>
+            <td>${money(totals.fixed)}</td>
+            <td>${money(totals.flexible)}</td>
+            <td>${money(totals.budget)}</td>
+            <td>${money(totals.spent)}</td>
+            ${diffCell(totals.budget - totals.spent)}
             <td></td>
         </tr>
     `;
 
-    renderProgress(month, label);
-    renderPlan();
+    renderProgress(month, label, budgets);
+    renderPlan(budgets);
     renderSchedule();
 }
 
-// One bar for every category, everything put on a monthly footing: a yearly
-// goal counts at a twelfth, against that category's spend in this month only.
-// Adding a whole year's Travel to one month of Groceries would not mean anything.
-function renderProgress(month, label) {
-    const budget = CATEGORIES.reduce((sum, c) => {
-        const goal = goals[c];
-        if (goal === undefined) return sum;
-        return sum + (goalPeriod(c) === 'yearly' ? goal / 12 : goal);
-    }, 0);
+// One bar for every category on a monthly footing, against everything spent
+// this month.
+function renderProgress(month, label, budgets) {
+    const budget = progressBudget(budgets);
 
     const spend = expenses
         .filter(e => !e.is_positive && e.expense_date.startsWith(month))
         .reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     progressLabel.textContent = `Total spend — ${label}`;
-    progressFigures.textContent = budget
-        ? `${money(spend)} of ${money(budget)}`
-        : `${money(spend)} — no goals set yet`;
+    progressFigures.textContent = budget ? `${money(spend)} of ${money(budget)}` : money(spend);
 
     progressFill.style.width = `${budget ? Math.min(100, (spend / budget) * 100) : 0}%`;
     progressFill.classList.toggle('over', budget > 0 && spend > budget);
@@ -332,39 +409,45 @@ function renderProgress(month, label) {
 
 // ---- saving ---------------------------------------------------------------
 
-// The upsert rewrites the whole row, so `fixed` has to be sent every time or
-// editing an amount would quietly clear the flag. Defaults to what is already
-// stored.
-async function putGoal(category, amount, isFixed = !!fixed[category]) {
+async function putGoal(category, amount) {
     const response = await fetch('/api/budget-goals', {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
             ...getAuthHeaders()
         },
-        body: JSON.stringify({ category, amount, period: goalPeriod(category), fixed: isFixed })
+        body: JSON.stringify({ category, amount, period: goalPeriod(category) })
     });
 
     if (!response.ok) throw new Error(`Failed to save ${category}`);
     goals[category] = amount;
-    if (isFixed) fixed[category] = true;
-    else delete fixed[category];
 }
 
-async function toggleFixed(category, isFixed) {
-    // A fixed cost with no amount is meaningless - autofill would reserve zero
-    // for it and then scale it as if it were discretionary anyway.
-    if (goals[category] === undefined) {
-        alert(`Set an amount for ${category} first — a fixed cost needs one.`);
-        return render();
-    }
+// A blank target goes back to the worked-out budget.
+async function saveTarget(category, value) {
+    const month = monthInput.value;
+    const amount = value === '' ? null : parseFloat(value);
+    if (amount !== null && !(amount >= 0)) return render();
 
     try {
-        await putGoal(category, goals[category], isFixed);
+        const response = amount === null
+            ? await fetch(`/api/budget-targets?category=${encodeURIComponent(category)}&month=${month}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            })
+            : await fetch('/api/budget-targets', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                body: JSON.stringify({ category, month, amount })
+            });
+        if (!response.ok) throw new Error(`Failed to save the ${category} target`);
+
+        if (amount === null) delete (targets[month] || {})[category];
+        else (targets[month] ||= {})[category] = amount;
         render();
     } catch (error) {
-        console.error('Fixed toggle error:', error);
-        alert('Error saving. Please try again.');
+        console.error('Target save error:', error);
+        alert(`${error.message}. Please try again.`);
         render();
     }
 }
@@ -379,79 +462,5 @@ async function saveGoal(category, value) {
     } catch (error) {
         console.error('Save error:', error);
         alert('Error saving budget goal. Please try again.');
-    }
-}
-
-// ---- autofill -------------------------------------------------------------
-
-// The arithmetic behind Autofill, without the confirm or the saves, so the
-// test runs the real thing.
-//
-// Past averages give the shape, what is left for spending gives the scale.
-// Fixed costs come off first and are never scaled - rent does not shrink
-// because there is less to spend. A pinned category keeps its whole goal and
-// is not rewritten. Any other category keeps its fixed expenses, and only its
-// past spending above them is flexible. What remains after the fixed costs is
-// split across those flexible parts in proportion to their averages. With no
-// income set, the averages are used as they are.
-//
-// Yearly goals are left out: a twelve-month total is not an average of months.
-function planAutofill(month) {
-    const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
-    const toSpend = leftForSpending();
-    const reserved = monthly.reduce((sum, c) => sum + reservedFor(c), 0);
-
-    const rows = monthly
-        .filter(c => !fixed[c])
-        .map(c => ({ category: c, average: averageMonthly(c, month), fixedPart: fixedItemsTotal(c) }))
-        .filter(row => row.average !== null)
-        .map(row => ({ ...row, flexible: Math.max(0, row.average - row.fixedPart) }));
-
-    const historic = rows.reduce((sum, row) => sum + row.flexible, 0);
-    const available = toSpend === null ? null : toSpend - reserved;
-    // Guard the divisor: with no prior spending there are no proportions to
-    // scale, and every goal would come out NaN.
-    const scale = available !== null && historic ? available / historic : 1;
-
-    return {
-        toSpend,
-        reserved,
-        available,
-        scale,
-        goals: rows.map(row => [row.category, Math.round((row.fixedPart + row.flexible * scale) * 100) / 100])
-    };
-}
-
-async function autofill() {
-    const month = monthInput.value;
-    const plan = planAutofill(month);
-    const count = plan.goals.length;
-
-    if (!count) {
-        return alert(`Nothing to autofill: no months before ${month} to average, or every category is pinned.`);
-    }
-
-    if (plan.available !== null && plan.available <= 0) {
-        return alert(`Fixed costs (${money(plan.reserved)}) use up the ${money(plan.toSpend)} left for spending.`);
-    }
-
-    // It overwrites goals, so it asks first - in one line.
-    const question = plan.available === null
-        ? `Set ${count} monthly goals to their average before ${month}?`
-        : `Split ${money(plan.available)} across ${count} monthly goals by past spending?`;
-    if (!confirm(question)) return;
-
-    autofillBtn.disabled = true;
-    try {
-        for (const [category, amount] of plan.goals) {
-            await putGoal(category, amount);
-        }
-        render();
-    } catch (error) {
-        console.error('Autofill error:', error);
-        alert(`${error.message}. Some goals may not have been saved.`);
-        render();
-    } finally {
-        autofillBtn.disabled = false;
     }
 }

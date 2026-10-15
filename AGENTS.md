@@ -51,26 +51,47 @@ What the UI used to say, and the reasoning behind it.
   - `__debt_payment__`
   - `__savings__`
 - The figures line under the plan:
-  - **Fixed** = pinned monthly goals + fixed expenses in unpinned monthly
-    categories.
-  - **Unassigned** = left for spending − all monthly goals.
-  - It reads **Goals over by** in red when the goals add up to more than is
-    left for spending.
+  - **Budget** = all monthly budgets added up.
+  - **Unassigned** = left for spending − Budget. It reads **Over by** in red
+    when Budget is more than is left for spending.
+  - **Flexible at N%** appears when targets squeezed the other groups.
 
-**Autofill goals.** It takes left for spending, less fixed costs, and splits
-it across the unpinned monthly categories.
+**Monthly budgets are worked out, not typed.** For each monthly group
+(`monthlyBudgets()` in `budget.js`):
 
-- Each category's share is in proportion to its average monthly spend before
-  the selected month, counting only what it spent above its own fixed
-  expenses. The fixed part is added back on top, unscaled.
-- It never writes a pinned category or a yearly goal.
-- With no income set, it uses the raw averages.
-- It refuses when fixed costs use up everything left for spending.
-- Yearly goals are **not** taken off the income first. The owner reverted that
-  (35a291e). Ask before bringing it back.
+- **Fixed** = its fixed expenses.
+- **Flexible** = its average monthly spend before the selected month, minus
+  Fixed, never below 0. Past spending already includes the fixed bills, so
+  only the average above them is flexible. With no earlier month it is 0.
+- **Budget** = Fixed + Flexible, so in practice the average, but never less
+  than the fixed bills.
+- **Remaining** = Budget − Spent this month.
 
-**Fixed column.** A tick pins the category's whole goal as a fixed cost.
-Autofill leaves it alone and sizes everything else around it.
+**Targets.** Typing in a group's Target sets its budget for the selected month
+only (table `budget_targets`). A blank Target goes back to the worked-out
+budget.
+
+- Every other group fits around the targets. From left for spending, take
+  the targets and the other groups' fixed bills. Then shrink the other
+  groups' flexible parts by one shared proportion until they fit.
+- Fixed bills never shrink.
+- Groups never grow past their average: spare money stays Unassigned.
+- Shrunk amounts round down to the cent, so they can't add up past what is
+  left.
+- If targets and fixed bills alone exceed what is left, the flexible parts go
+  to 0 and the plan reads Over by.
+- With no income set, nothing shrinks, but targets still set their budgets.
+- A target below a group's fixed bills is kept as typed. Its Flexible goes
+  negative and shows red.
+- Yearly goals are **not** taken off the income before fitting. The owner
+  reverted that (35a291e). Ask before bringing it back.
+
+**Removed:** pinning a whole category, typed monthly goals, and the Autofill
+button.
+
+- Older databases still have `budget_goals.fixed` (the pin) and the old
+  monthly goal rows. Nothing reads them.
+- A group that used to be pinned, like Rent, should be a fixed expense now.
 
 **Fixed expenses inside a category.** Click the category name (▸) to open its
 row. The `N fixed` badge counts what is inside.
@@ -80,8 +101,8 @@ row. The `N fixed` badge counts what is inside.
   and day for a yearly one.
 - In a monthly category, a yearly amount counts at a twelfth. In a yearly
   category, a monthly amount counts twelve times.
-- Adding one raises the category's goal to cover its fixed expenses if the
-  goal is unset or below them. It never lowers a goal.
+- For a yearly group, adding one raises its typed goal to cover its fixed
+  expenses if the goal is unset or below them. It never lowers a goal.
 
 **Fixed expenses schedule.** Every fixed expense, by next due date from today;
 ones with no date go last.
@@ -90,7 +111,7 @@ ones with no date go last.
 - A due day past the end of a short month falls on that month's last day.
 - The monthly total counts yearly ones at a twelfth.
 
-**Yearly goals.**
+**Yearly goals.** Still typed by hand: maaser is a rule, not an average.
 
 - Tzedakah runs on the Jewish year, 1 Tishrei to 29 Elul. The calculation is
   `public/hebrew-calendar.js`: plain arithmetic, not `Intl`.
@@ -99,7 +120,7 @@ ones with no date go last.
 - For the selected month, the year is the one containing today if that month
   is the current one, otherwise the one containing its last day.
 
-**Progress bar.** Monthly goals plus a twelfth of each yearly goal, against
+**Progress bar.** Monthly budgets plus a twelfth of each yearly goal, against
 this month's spending.
 
 ### Cards

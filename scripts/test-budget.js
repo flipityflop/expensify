@@ -1,7 +1,8 @@
-// Checks the budget-page sums that are easy to get quietly wrong: the
-// autofill average and split, the progress bar's mixed monthly/yearly total,
-// the plan's income less debt payment and savings, fixed expenses inside a
-// category, and Tzedakah's year running from Rosh Hashanah.
+// Checks the budget-page sums that are easy to get quietly wrong: the monthly
+// average, the worked-out budgets - fixed expenses plus the average above
+// them - and how targets squeeze everything else into what is left for
+// spending, the progress bar's mixed monthly/yearly total, and Tzedakah's
+// year running from Rosh Hashanah.
 //
 //   node scripts/test-budget.js
 //
@@ -74,163 +75,135 @@ assert.strictEqual(call(`actual('Groceries', '2026-04')`), 50);      // that mon
 assert.strictEqual(call(`actual('Travel', '2026-04')`), 1020);       // whole year
 assert.strictEqual(call(`spentIn('Travel', '2026-04')`), 120);       // that month
 
-// ---- progress bar totals -------------------------------------------------
-// Monthly goal 400 + yearly goal 1200 counted at a twelfth = 500 budget.
-vm.runInContext(`goals = { Groceries: 400, Travel: 1200 };`, ctx);
-const budget = call(`CATEGORIES.reduce((s, c) => goals[c] === undefined ? s
-    : s + (goalPeriod(c) === 'yearly' ? goals[c] / 12 : goals[c]), 0)`);
-assert.strictEqual(budget, 500);
-
-// April spend across every category, income excluded: 50 + 120 = 170.
-const spend = call(`expenses.filter(e => !e.is_positive && e.expense_date.startsWith('2026-04'))
-    .reduce((s, e) => s + Math.abs(e.amount), 0)`);
-assert.strictEqual(spend, 170);
-assert.strictEqual(Math.min(100, (spend / budget) * 100), 34);
-
-// ---- autofill scaling ----------------------------------------------------
-// Groceries averages 200, Gifts 20; everything else 0. Historic total 220.
-// Runs the real planAutofill(), which is everything autofill() does short of
-// the confirm and the saves.
-const plan = (setup = '') => JSON.parse(call(`(() => {
-    ${setup}
-    const p = planAutofill('2026-04');
-    return JSON.stringify({ ...p, goals: Object.fromEntries(p.goals) });
-})()`));
-const reset = () => vm.runInContext(`goals = {}; fixed = {}; fixedItems = [];`, ctx);
-const scaled = income => { reset(); return plan(`goals[INCOME_KEY] = ${income};`).goals; };
-
-// No income set: raw averages, untouched.
-const raw = scaled(0);
-assert.strictEqual(raw.Groceries, 200);
-assert.strictEqual(raw.Gifts, 20);
-
-// 1100 to spend against a 220 history = 5x. Proportions hold, total matches.
-const split = scaled(1100);
-assert.strictEqual(split.Groceries, 1000);
-assert.strictEqual(split.Gifts, 100);
-assert.strictEqual(split.Rent, 0);
-const sum = Object.values(split).reduce((s, v) => s + v, 0);
-assert.ok(Math.abs(sum - 1100) < 0.05, `split totals ${sum}, expected ~1100`);
-
-// Scaling down works the same way.
-const tight = scaled(110);
-assert.strictEqual(tight.Groceries, 100);
-assert.strictEqual(tight.Gifts, 10);
-
-// Yearly goals are never written - a twelve-month total is not an average.
-assert.ok(!('Tzedakah' in split) && !('Travel' in split), 'autofill wrote a yearly goal');
-
-// The reserved keys must never be rendered or budgeted as a category.
-assert.ok(!call(`PLAN_KEYS.some(k => CATEGORIES.includes(k))`), 'a plan key leaked into CATEGORIES');
-
-// The income is still read from the key it was saved under before it was
-// called income, so the amount already stored carries over.
-assert.strictEqual(call(`INCOME_KEY`), '__spending_budget__');
-
-// ---- pinned categories ---------------------------------------------------
-// Fixed costs come off the income, the rest is split proportionally across
-// what is left.
-const withFixed = income => { reset(); return plan(`goals = { Rent: 500, [INCOME_KEY]: ${income} }; fixed = { Rent: true };`); };
-
-// Rent pinned at 500. Income 1500 -> 1000 left, split over Groceries 200 +
-// Gifts 20 = 220 of history, so 4.5454x.
-const f = withFixed(1500);
-assert.strictEqual(f.reserved, 500);
-assert.strictEqual(f.available, 1000);
-
-// Rent must not be rewritten, and must not be scaled.
-assert.ok(!Object.keys(f.goals).includes('Rent'), 'autofill rewrote a fixed category');
-assert.strictEqual(call(`goals.Rent`), 500, 'fixed amount changed');
-
-assert.strictEqual(f.goals.Groceries, 909.09);   // 200/220 * 1000
-assert.strictEqual(f.goals.Gifts, 90.91);        //  20/220 * 1000
-const flexSum = Object.values(f.goals).reduce((s, v) => s + v, 0);
-assert.ok(Math.abs(flexSum + f.reserved - 1500) < 0.05,
-    `fixed ${f.reserved} + flexible ${flexSum} should equal the 1500 income`);
-
-// Lowering the income squeezes only the flexible half; Rent holds at 500.
-const tightF = withFixed(1000);
-assert.strictEqual(tightF.available, 500);
-assert.strictEqual(tightF.goals.Groceries, 454.55);
-assert.strictEqual(call(`goals.Rent`), 500, 'fixed amount moved when income fell');
-
-// Fixed costs exceeding the income must be refused, not turned negative.
-reset();
-assert.ok(plan(`goals = { Rent: 2000, [INCOME_KEY]: 1500 }; fixed = { Rent: true };`).available <= 0,
-    'over-committed case should be refused');
-
-// Editing an amount must not silently clear the fixed flag: putGoal defaults
-// isFixed to whatever is already stored.
-vm.runInContext(`goals = { Rent: 500 }; fixed = { Rent: true };`, ctx);
-assert.ok(call(`(function () { return putGoal.length; })()`) <= 3, 'putGoal signature changed');
-assert.ok(call(`!!fixed['Rent']`), 'fixed flag lost');
-
-// ---- debt payment and savings --------------------------------------------
-// Both come off the income before anything is split.
-reset();
-assert.strictEqual(call(`leftForSpending()`), null);                  // no income, no plan
-vm.runInContext(`goals = { [INCOME_KEY]: 1500, [DEBT_PAYMENT_KEY]: 200, [SAVINGS_KEY]: 100 };`, ctx);
-assert.strictEqual(call(`leftForSpending()`), 1200);
-
-// With Rent pinned at 500 as well: 1500 - 200 - 100 - 500 = 700 to split.
-const p = plan(`goals.Rent = 500; fixed = { Rent: true };`);
-assert.strictEqual(p.toSpend, 1200);
-assert.strictEqual(p.available, 700);
-assert.strictEqual(p.goals.Groceries, 636.36);   // 200/220 * 700
-assert.strictEqual(p.goals.Gifts, 63.64);        //  20/220 * 700
-const planned = Object.values(p.goals).reduce((s, v) => s + v, 0) + p.reserved + 200 + 100;
-assert.ok(Math.abs(planned - 1500) < 0.05, `goals + fixed + debt + savings = ${planned}, expected 1500`);
-
-// Debt payment and savings that swallow the income leave nothing to split.
-reset();
-assert.ok(plan(`goals = { [INCOME_KEY]: 1000, [DEBT_PAYMENT_KEY]: 600, [SAVINGS_KEY]: 400 };`).available <= 0,
-    'income fully spoken for should be refused');
-
-// ---- fixed expenses inside a category ------------------------------------
+// ---- monthly budgets ------------------------------------------------------
+// Runs the real monthlyBudgets() for April against the Jan-Mar history:
+// Groceries averages 200, Gifts 20, every other monthly group 0.
+const reset = () => vm.runInContext(`goals = {}; targets = {}; fixedItems = [];`, ctx);
+const budgets = (setup = '', month = '2026-04') => {
+    reset();
+    return JSON.parse(call(`(() => { ${setup}; return JSON.stringify(monthlyBudgets('${month}')); })()`));
+};
 const item = (category, amount, frequency = 'monthly') => ({ category, name: 'x', amount, frequency });
+const near = (actual, expected, what) => assert.ok(Math.abs(actual - expected) < 0.015, `${what}: ${actual}, expected ${expected}`);
 
-// A yearly bill in a monthly category counts at a twelfth; a monthly one in a
-// yearly category at twelve times.
+// Nothing fixed, no income, no targets: each budget is the group's average.
+let b = budgets();
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 0, flexible: 200, budget: 200, spent: 50 });
+assert.strictEqual(b.rows.Gifts.budget, 20);
+assert.strictEqual(b.rows.Rent.budget, 0);
+assert.strictEqual(b.scale, 1);
+assert.deepStrictEqual(b.totals, { fixed: 0, flexible: 220, budget: 220, spent: 50 });
+assert.ok(!('Travel' in b.rows) && !('Tzedakah' in b.rows), 'a yearly goal was worked out');
+
+// No earlier month to average: the budget is just the fixed part.
+b = budgets(`fixedItems = [${JSON.stringify(item('Groceries', 80))}]`, '2026-01');
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 80, flexible: 0, budget: 80, spent: 100 });
+
+// ---- fixed expenses inside a group -----------------------------------------
+// A yearly bill in a monthly group counts at a twelfth; a monthly one in a
+// yearly group at twelve times.
 assert.strictEqual(call(`fixedItemAmount(${JSON.stringify(item('Groceries', 50))})`), 50);
 assert.strictEqual(call(`fixedItemAmount(${JSON.stringify(item('Groceries', 120, 'yearly'))})`), 10);
 assert.strictEqual(call(`fixedItemAmount(${JSON.stringify(item('Tzedakah', 100))})`), 1200);
 assert.strictEqual(call(`fixedItemAmount(${JSON.stringify(item('Tzedakah', 500, 'yearly'))})`), 500);
 
 // Groceries: a 50/month CSA and a 120/year membership = 60/month fixed. Its
-// 200 average leaves 140 flexible; with Gifts' 20 that is 160 of history.
+// 200 average already paid them, so 140 is flexible and the budget stays 200.
 const items = JSON.stringify([item('Groceries', 50), item('Groceries', 120, 'yearly')]);
+b = budgets(`fixedItems = ${items}`);
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 60, flexible: 140, budget: 200, spent: 50 });
+
+// Fixed bills above anything spent before: nothing is flexible, and the
+// budget is exactly the bills.
+b = budgets(`fixedItems = [${JSON.stringify(item('Groceries', 300))}]`);
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 300, flexible: 0, budget: 300, spent: 50 });
+
+// ---- fitting into what is left for spending ----------------------------------
 reset();
-vm.runInContext(`fixedItems = ${items};`, ctx);
-assert.strictEqual(call(`fixedItemsTotal('Groceries')`), 60);
+assert.strictEqual(call(`leftForSpending()`), null);                  // no income, no plan
+vm.runInContext(`goals = { [INCOME_KEY]: 1500, [DEBT_PAYMENT_KEY]: 200, [SAVINGS_KEY]: 100 };`, ctx);
+assert.strictEqual(call(`leftForSpending()`), 1200);
 
-// No income: each category gets its fixed part plus its flexible average,
-// which is just the average again when the history covers the fixed part.
-const noIncome = plan(`fixedItems = ${items};`);
-assert.strictEqual(noIncome.goals.Groceries, 200);
-assert.strictEqual(noIncome.goals.Gifts, 20);
+// Plenty of room: budgets stay at their averages, never grow past them.
+b = budgets(`goals[INCOME_KEY] = 1100`);
+assert.strictEqual(b.scale, 1);
+assert.strictEqual(b.rows.Groceries.budget, 200);
+assert.strictEqual(b.totals.budget, 220);
 
-// 1000 income: the 60 is held back, the other 940 split over 160 = 5.875x.
-// Only the flexible 140 of Groceries scales; the 60 does not.
-const items1000 = plan(`fixedItems = ${items}; goals[INCOME_KEY] = 1000;`);
-assert.strictEqual(items1000.reserved, 60);
-assert.strictEqual(items1000.available, 940);
-assert.strictEqual(items1000.goals.Groceries, 882.5);   // 60 + 140 * 5.875
-assert.strictEqual(items1000.goals.Gifts, 117.5);       //      20 * 5.875
-const itemsSum = Object.values(items1000.goals).reduce((s, v) => s + v, 0);
-assert.ok(Math.abs(itemsSum - 1000) < 0.05, `split totals ${itemsSum}, expected 1000`);
+// Too little: the flexible parts shrink by one proportion; fixed bills do not.
+// 160 - Groceries' 60 fixed = 100 for 140 + 20 = 160 of flexible: 0.625x.
+b = budgets(`fixedItems = ${items}; goals[INCOME_KEY] = 160`);
+assert.strictEqual(b.scale, 0.625);
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 60, flexible: 87.5, budget: 147.5, spent: 50 });
+assert.strictEqual(b.rows.Gifts.budget, 12.5);
+near(b.totals.budget, 160, 'squeezed total');
 
-// Fixed expenses above anything spent before: nothing flexible, the goal is
-// exactly the fixed part, whatever the income.
+// Debt payment and savings come off before anything is fitted.
+// 1500 - 1300 - 90 = 110 for 220 of flexible: 0.5x.
+b = budgets(`goals = { [INCOME_KEY]: 1500, [DEBT_PAYMENT_KEY]: 1300, [SAVINGS_KEY]: 90 }`);
+assert.strictEqual(b.scale, 0.5);
+assert.strictEqual(b.rows.Groceries.budget, 100);
+assert.strictEqual(b.rows.Gifts.budget, 10);
+
+// ---- targets ----------------------------------------------------------------
+const clothes = amount => `targets = { '2026-04': { 'Clothing & Accessories': ${amount} } }`;
+
+// "$150 on clothes this month": Clothing takes its target and everything
+// else fits around it. 300 - 150 = 150 for the others' 220 of flexible.
+b = budgets(`goals[INCOME_KEY] = 300; ${clothes(150)}`);
+assert.deepStrictEqual(b.rows['Clothing & Accessories'], { fixed: 0, flexible: 150, budget: 150, spent: 0, target: 150 });
+assert.strictEqual(b.rows.Groceries.budget, 136.36);   // 200 * 150/220
+assert.strictEqual(b.rows.Gifts.budget, 13.63);        //  20 * 150/220, rounded down
+near(b.totals.budget, 300, 'total with a target');
+assert.ok(b.totals.budget <= 300, `shrunk budgets add up past what is left: ${b.totals.budget}`);
+
+// Fixed bills elsewhere come out before the squeeze, untouched.
+// 300 - 150 (clothes) - 60 (Groceries' bills) = 90 for 160 of flexible.
+b = budgets(`fixedItems = ${items}; goals[INCOME_KEY] = 300; ${clothes(150)}`);
+assert.strictEqual(b.scale, 0.5625);
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 60, flexible: 78.75, budget: 138.75, spent: 50 });
+assert.strictEqual(b.rows.Gifts.budget, 11.25);
+near(b.totals.budget, 300, 'total with a target and fixed bills');
+
+// A target is for its own month only: March's does not touch April.
+b = budgets(`goals[INCOME_KEY] = 300; targets = { '2026-03': { 'Clothing & Accessories': 150 } }`);
+assert.strictEqual(b.rows['Clothing & Accessories'].budget, 0);
+assert.strictEqual(b.scale, 1);
+
+// Targets beyond what is left: the others fall back to their fixed bills and
+// the total runs over, for the plan to show by how much.
+b = budgets(`fixedItems = ${items}; goals[INCOME_KEY] = 100; ${clothes(150)}`);
+assert.strictEqual(b.scale, 0);
+assert.strictEqual(b.rows.Groceries.budget, 60);
+assert.strictEqual(b.rows.Gifts.budget, 0);
+assert.strictEqual(b.totals.budget, 210);
+
+// A target under a group's fixed bills is kept as typed; Flexible goes below
+// zero, which the row shows in red.
+b = budgets(`fixedItems = ${items}; targets = { '2026-04': { Groceries: 40 } }`);
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 60, flexible: -20, budget: 40, spent: 50, target: 40 });
+
+// No income set: a target still sets its budget, and nothing else shrinks.
+b = budgets(clothes(500));
+assert.strictEqual(b.rows['Clothing & Accessories'].budget, 500);
+assert.strictEqual(b.rows.Groceries.budget, 200);
+assert.strictEqual(b.scale, 1);
+
+// ---- progress bar ------------------------------------------------------------
+// April's monthly budgets (220) + Travel's 1200 a year at a twelfth = 320.
 reset();
-const big = plan(`fixedItems = ${JSON.stringify([item('Groceries', 300)])}; goals[INCOME_KEY] = 1000;`);
-assert.strictEqual(big.goals.Groceries, 300);
-assert.strictEqual(big.goals.Gifts, 700);               // all of the 700 left
+vm.runInContext(`goals = { Travel: 1200 };`, ctx);
+assert.strictEqual(call(`progressBudget(monthlyBudgets('2026-04'))`), 320);
 
-// A pinned category reserves its goal, not its fixed expenses.
-reset();
-const pinned = plan(`fixedItems = ${items}; goals = { Groceries: 400, [INCOME_KEY]: 1000 }; fixed = { Groceries: true };`);
-assert.strictEqual(pinned.reserved, 400);
-assert.ok(!('Groceries' in pinned.goals), 'autofill rewrote a pinned category');
+// April spend across every category, income excluded: 50 + 120 = 170.
+const spend = call(`expenses.filter(e => !e.is_positive && e.expense_date.startsWith('2026-04'))
+    .reduce((s, e) => s + Math.abs(e.amount), 0)`);
+assert.strictEqual(spend, 170);
+
+// The reserved keys must never be rendered or budgeted as a category, and the
+// income is still read from the key it was first saved under.
+assert.ok(!call(`PLAN_KEYS.some(k => CATEGORIES.includes(k))`), 'a plan key leaked into CATEGORIES');
+assert.strictEqual(call(`INCOME_KEY`), '__spending_budget__');
 
 // ---- money ---------------------------------------------------------------
 assert.strictEqual(call(`money(1234.5)`), '$1234.50');

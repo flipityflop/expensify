@@ -78,21 +78,31 @@ assert.ok(call(`dueLabel(${yearly(2, 29)})`).startsWith('due '));
 // ---- under an opened category row ----------------------------------------
 vm.runInContext(`fixedItems = ${JSON.stringify([
     { id: 1, category: 'Bills & Insurance', name: 'Phone <5G>', amount: 80, frequency: 'monthly', due_day: 15 },
-    { id: 2, category: 'Bills & Insurance', name: 'Car insurance', amount: 1200, frequency: 'yearly', due_month: 3, due_day: 1 }
-])}; goals = { 'Bills & Insurance': 400 };`, ctx);
+    { id: 2, category: 'Bills & Insurance', name: 'Car insurance', amount: 1200, frequency: 'yearly', due_month: 3, due_day: 1 },
+    { id: 3, category: 'Tzedakah', name: 'Yeshiva pledge', amount: 100, frequency: 'monthly', due_day: 1 }
+])}; goals = { Tzedakah: 7200 };`, ctx);
 
-// 80 a month + 1200 a year at a twelfth = 180 of the 400 goal fixed.
+// A monthly group lists its fixed expenses across all 7 of its table's
+// columns. Its fixed and flexible parts are columns of the row itself, so
+// there is no summary line under the list.
 const detail = call(`fixedDetailHtml('Bills & Insurance')`);
-assert.ok(detail.includes('Fixed $180.00 · Flexible $220.00'), detail);
+assert.ok(detail.includes('colspan="7"'), detail);
 assert.ok(detail.includes('Phone &lt;5G&gt;'), 'item name not escaped');
 assert.ok(detail.includes('$80.00/mo') && detail.includes('$1200.00/yr'));
 assert.ok(detail.includes('data-item-add="Bills & Insurance"'));
+assert.ok(!detail.includes('Fixed $'), detail);
 
-// Fixed expenses above the goal are called out rather than shown as negative.
-vm.runInContext(`goals = { 'Bills & Insurance': 100 };`, ctx);
-assert.ok(call(`fixedDetailHtml('Bills & Insurance')`).includes('<span class="over">Fixed $180.00 is over the $100.00 goal</span>'));
+// A yearly goal is typed, so its row sums its fixed expenses against it:
+// a 100/month pledge is 1200 of the 7200 year. Its table has 5 columns.
+const tzedakah = call(`fixedDetailHtml('Tzedakah')`);
+assert.ok(tzedakah.includes('colspan="5"'), tzedakah);
+assert.ok(tzedakah.includes('Fixed $1200.00 · Flexible $6000.00'), tzedakah);
 
-// An empty category opens to just its Add button - no explainer line.
+// Fixed expenses above a yearly goal are called out rather than shown as negative.
+vm.runInContext(`goals = { Tzedakah: 1000 };`, ctx);
+assert.ok(call(`fixedDetailHtml('Tzedakah')`).includes('<span class="over">Fixed $1200.00 is over the $1000.00 goal</span>'));
+
+// An empty group opens to just its Add button - no explainer line.
 const empty = call(`fixedDetailHtml('Groceries')`);
 assert.ok(empty.includes('data-item-add="Groceries"'));
 assert.ok(!/No fixed|yet/.test(empty), empty);

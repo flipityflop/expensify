@@ -54,8 +54,16 @@ CREATE TABLE budget_goals (
     category TEXT NOT NULL UNIQUE,             -- or a reserved plan key, below
     amount REAL NOT NULL,
     period TEXT NOT NULL DEFAULT 'monthly',    -- 'monthly' | 'yearly'
-    fixed INTEGER DEFAULT 0,                   -- 1 = whole goal pinned; autofill leaves it alone
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE budget_targets (                  -- a monthly group's budget set by hand
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,                    -- a monthly category
+    month TEXT NOT NULL,                       -- YYYY-MM it applies to
+    amount REAL NOT NULL,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (category, month)
 );
 
 CREATE TABLE debts (
@@ -118,7 +126,10 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `GET` | `/api/autocomplete/event?q=` | Suggest events |
 | `GET` | `/api/merchants-by-category?category=` | Top 6 merchants in a category (entry-form chips) |
 | `GET` | `/api/budget-goals` | All budget goals |
-| `PUT` | `/api/budget-goals` | Upsert one goal by category |
+| `PUT` | `/api/budget-goals` | Upsert one goal by category (yearly goals and the plan rows) |
+| `GET` | `/api/budget-targets` | All monthly targets |
+| `PUT` | `/api/budget-targets` | Upsert one target by category and month |
+| `DELETE` | `/api/budget-targets?category=&month=` | Clear a target |
 | `GET` | `/api/debts` | All debts, oldest first |
 | `POST` | `/api/debts` | Add a debt |
 | `PUT` | `/api/debts/:id` | Replace a debt's name, total, paid, notes and as-of date |
@@ -145,7 +156,8 @@ scripts both read that file. Add a category there and nowhere else.
 Income is the `is_positive` toggle, not a category; the list above is the income
 sub-type, a separate dimension only reachable behind that toggle.
 
-Budget goals are monthly, except **Tzedakah** and **Travel**, which are yearly
+Budgets are monthly and worked out from fixed expenses and past spending,
+except **Tzedakah** and **Travel**, whose goals are yearly and typed
 (`YEARLY_CATEGORIES` in `public/categories.js`). Tzedakah's year is the Jewish
 year, Rosh Hashanah (1 Tishrei) to the day before the next
 (`HEBREW_YEAR_CATEGORIES`); Travel's is January to December.
