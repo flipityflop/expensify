@@ -51,35 +51,47 @@ How each page works, and why.
   - `__savings__`
 - The figures line under the plan:
   - **Budget** = all monthly budgets added up.
-  - **Unassigned** = left for spending − Budget. It reads **Over by** in red
-    when Budget is more than is left for spending.
-  - **Flexible at N%** appears when targets squeezed the other groups.
+  - **Unassigned** = left for spending − Budget. Normally just the cents lost
+    to rounding, or all of it when there is no spending history to spread it
+    by. It reads **Over by** in red when Budget is more than is left.
+  - **Flexible at N%** appears when the flexible parts were scaled: under
+    100% squeezed to fit, over 100% grown to use spare money.
 
 **Monthly budgets are worked out.** For each monthly group
 (`monthlyBudgets()` in `budget.js`):
 
 - **Fixed** = its fixed expenses.
-- **Flexible** = its average monthly spend before the selected month, minus
-  Fixed, never below 0. Past spending already includes the fixed bills, so
-  only the average above them is flexible. With no earlier month it is 0.
-- **Budget** = Fixed + Flexible, so in practice the average, but never less
-  than the fixed bills.
+- Its **usual flexible** part = its average monthly spend before the selected
+  month, minus Fixed, never below 0. Past spending already includes the
+  fixed bills, so only the average above them is flexible. With no earlier
+  month it is 0.
+- **Flexible** = the usual flexible part, scaled to fill what is left for
+  spending (below).
+- **Budget** = Fixed + Flexible.
 - **Remaining** = Budget − Spent this month.
+
+**Filling what is left for spending.** With an income set, every group
+without a target scales its usual flexible part by one shared proportion.
+The budgets then use exactly what is left for spending after the targets and
+the other groups' fixed bills.
+
+- Short of money, the groups shrink. With money to spare, they grow: the
+  remainder is spread across them in proportion to what each usually spends
+  beyond its fixed bills.
+- Fixed bills and targets never change.
+- A group with no spending history has no flexible part, so it gets no
+  share.
+- Scaled amounts round down to the cent, so the total can't pass what is
+  left. The leftover cents show as Unassigned.
+- If targets and fixed bills alone exceed what is left, the flexible parts go
+  to 0 and the plan reads Over by.
+- With no income set, or no spending history to scale by, nothing scales.
 
 **Targets.** Typing in a group's Target sets its budget for the selected month
 only (table `budget_targets`). A blank Target goes back to the worked-out
 budget.
 
-- Every other group fits around the targets. From left for spending, take
-  the targets and the other groups' fixed bills. Then shrink the other
-  groups' flexible parts by one shared proportion until they fit.
-- Fixed bills never shrink.
-- Groups never grow past their average: spare money stays Unassigned.
-- Shrunk amounts round down to the cent, so they can't add up past what is
-  left.
-- If targets and fixed bills alone exceed what is left, the flexible parts go
-  to 0 and the plan reads Over by.
-- With no income set, nothing shrinks, but targets still set their budgets.
+- The other groups fill around it as above, so a target takes from them.
 - A target below a group's fixed bills is kept as typed. Its Flexible goes
   negative and shows red.
 - Yearly goals are **not** taken off the income before fitting. The owner

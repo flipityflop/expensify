@@ -1,7 +1,7 @@
 // Checks the budget-page sums that are easy to get quietly wrong: the monthly
 // average, the worked-out budgets - fixed expenses plus the average above
-// them - and how targets squeeze everything else into what is left for
-// spending, the progress bar's mixed monthly/yearly total, and Tzedakah's
+// them - how they scale to fill what is left for spending, shrinking or
+// growing around targets, the progress bar's mixed monthly/yearly total, and Tzedakah's
 // year running from Rosh Hashanah.
 //
 //   node scripts/test-budget.js
@@ -124,11 +124,27 @@ assert.strictEqual(call(`leftForSpending()`), null);                  // no inco
 vm.runInContext(`goals = { [INCOME_KEY]: 1500, [DEBT_PAYMENT_KEY]: 200, [SAVINGS_KEY]: 100 };`, ctx);
 assert.strictEqual(call(`leftForSpending()`), 1200);
 
-// Plenty of room: budgets stay at their averages, never grow past them.
+// Money to spare is spread the same way: 1100 for 220 of flexible is 5x.
+// A group with no spending history (Rent) has no share to grow.
 b = budgets(`goals[INCOME_KEY] = 1100`);
+assert.strictEqual(b.scale, 5);
+assert.strictEqual(b.rows.Groceries.budget, 1000);
+assert.strictEqual(b.rows.Gifts.budget, 100);
+assert.strictEqual(b.rows.Rent.budget, 0);
+assert.strictEqual(b.totals.budget, 1100);
+
+// Fixed bills do not grow either: 1000 - Groceries' 60 fixed = 940 for 140 +
+// 20 of flexible, 5.875x on the flexible part only.
+b = budgets(`fixedItems = ${items}; goals[INCOME_KEY] = 1000`);
+assert.deepStrictEqual(b.rows.Groceries, { fixed: 60, flexible: 822.5, budget: 882.5, spent: 50 });
+assert.strictEqual(b.rows.Gifts.budget, 117.5);
+assert.strictEqual(b.totals.budget, 1000);
+
+// With no spending history at all there is no proportion to spread by, so
+// the money stays unassigned.
+b = budgets(`goals[INCOME_KEY] = 1000`, '2026-01');
 assert.strictEqual(b.scale, 1);
-assert.strictEqual(b.rows.Groceries.budget, 200);
-assert.strictEqual(b.totals.budget, 220);
+assert.strictEqual(b.totals.budget, 0);
 
 // Too little: the flexible parts shrink by one proportion; fixed bills do not.
 // 160 - Groceries' 60 fixed = 100 for 140 + 20 = 160 of flexible: 0.625x.
@@ -165,10 +181,20 @@ assert.deepStrictEqual(b.rows.Groceries, { fixed: 60, flexible: 78.75, budget: 1
 assert.strictEqual(b.rows.Gifts.budget, 11.25);
 near(b.totals.budget, 300, 'total with a target and fixed bills');
 
-// A target is for its own month only: March's does not touch April.
+// A target is for its own month only: March's does not touch April, where
+// Clothing has no history and so no share of the 300 spread over the rest.
 b = budgets(`goals[INCOME_KEY] = 300; targets = { '2026-03': { 'Clothing & Accessories': 150 } }`);
 assert.strictEqual(b.rows['Clothing & Accessories'].budget, 0);
-assert.strictEqual(b.scale, 1);
+near(b.scale, 300 / 220, 'scale without the March target');
+
+// A target with money to spare: the rest grow into what the target leaves.
+// 1100 - 150 = 950 for 220 of flexible.
+b = budgets(`goals[INCOME_KEY] = 1100; ${clothes(150)}`);
+assert.strictEqual(b.rows['Clothing & Accessories'].budget, 150);
+assert.strictEqual(b.rows.Groceries.budget, 863.63);   // 200 * 950/220, rounded down
+assert.strictEqual(b.rows.Gifts.budget, 86.36);        //  20 * 950/220, rounded down
+near(b.totals.budget, 1100, 'total with a target and money to spare');
+assert.ok(b.totals.budget <= 1100, `grown budgets add up past what is left: ${b.totals.budget}`);
 
 // Targets beyond what is left: the others fall back to their fixed bills and
 // the total runs over, for the plan to show by how much.

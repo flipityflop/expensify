@@ -201,14 +201,16 @@ function fixedItemsTotal(category) {
 // no earlier month to average, the flexible part is nothing.
 //
 // A group with a target for the month takes the target instead, and the rest
-// fit around it: once the targets and everyone else's fixed bills are taken
-// out of what is left for spending, the other groups' flexible parts shrink
-// by the same proportion until they fit. They never grow past their averages
-// - spare money stays unassigned. Fixed bills never shrink. With no income
-// set there is nothing to fit into, so nothing shrinks.
+// fill whatever is left: once the targets and everyone else's fixed bills are
+// taken out of what is left for spending, the other groups' flexible parts
+// all scale by one proportion until they use exactly that - shrinking when it
+// is short, growing when there is money to spare. Fixed bills and targets
+// never change. With no income set there is nothing to fill, and with no
+// spending history there is no proportion to fill it by, so nothing scales.
 //
 // Returns { rows: { category -> { fixed, flexible, budget, spent, target } },
-// totals, scale }, where scale is how far the flexible parts shrank (1 = not).
+// totals, scale }, where scale is how far the flexible parts were scaled
+// (1 = not at all).
 function monthlyBudgets(month) {
     const monthly = CATEGORIES.filter(c => goalPeriod(c) !== 'yearly');
     const set = targets[month] || {};
@@ -233,7 +235,7 @@ function monthlyBudgets(month) {
         const room = left
             - monthly.reduce((sum, c) => sum + (rows[c].target ?? 0), 0)
             - free.reduce((sum, c) => sum + rows[c].fixed, 0);
-        scale = Math.max(0, Math.min(1, room / wanted));
+        scale = Math.max(0, room / wanted);
     }
 
     const totals = { fixed: 0, flexible: 0, budget: 0, spent: 0 };
@@ -243,9 +245,9 @@ function monthlyBudgets(month) {
             r.budget = r.target;
             r.flexible = r.target - r.fixed; // below 0 when the target is under the fixed bills
         } else {
-            // Shrunk amounts round down, so the cents cannot add up past what
+            // Scaled amounts round down, so the cents cannot add up past what
             // is left; the epsilon keeps 304.9999999 from flooring to 304.99.
-            r.flexible = scale < 1 ? Math.floor(r.usual * scale * 100 + 1e-6) / 100 : r.usual;
+            r.flexible = scale !== 1 ? Math.floor(r.usual * scale * 100 + 1e-6) / 100 : r.usual;
             r.budget = r.fixed + r.flexible;
         }
         delete r.usual;
@@ -274,7 +276,7 @@ function leftForSpending() {
 }
 
 // Whether the monthly budgets fit in what is left for spending, and how far
-// the targets squeezed everything else.
+// the flexible parts were scaled to fill it.
 function renderPlan(budgets) {
     const left = leftForSpending();
     planLeft.textContent = left === null ? '—' : money(left);
@@ -288,7 +290,7 @@ function renderPlan(budgets) {
     const spare = left - budgets.totals.budget;
     planBreakdown.innerHTML = `Budget ${money(budgets.totals.budget)} · `
         + (spare > -0.005 ? `Unassigned ${money(Math.max(0, spare))}` : `<span class="over">Over by ${money(-spare)}</span>`)
-        + (budgets.scale < 1 ? ` · Flexible at ${Math.round(budgets.scale * 100)}%` : '');
+        + (Math.round(budgets.scale * 100) !== 100 ? ` · Flexible at ${Math.round(budgets.scale * 100)}%` : '');
 }
 
 // ---- the tables -----------------------------------------------------------
