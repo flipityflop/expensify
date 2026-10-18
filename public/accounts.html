@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cards - Expense Tracker</title>
+    <title>Accounts - Expense Tracker</title>
     <link rel="stylesheet" href="style.css">
     <style>
         /* Three tiles across even on a phone, where style.css would otherwise
@@ -21,9 +21,9 @@
         #card-totals .summary-label { font-size: 0.8rem; }
         #card-totals .summary-value { font-size: 1.1rem; }
 
-        /* ----- Credit cards and debts share the row look ----- */
+        /* ----- Every section's rows share one look ----- */
 
-        .card-row, .debt-row {
+        .acct-row, .debt-row {
             background: #1a1f2e;
             border: 1px solid #2a3441;
             border-radius: 10px;
@@ -31,21 +31,21 @@
             margin-bottom: 10px;
         }
 
-        .card-row-head, .debt-row-head {
+        .acct-row-head, .debt-row-head {
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .card-name, .debt-name { font-weight: 600; }
+        .acct-name, .debt-name { font-weight: 600; }
 
-        .card-balance {
+        .acct-figure {
             margin-left: auto;
             font-size: 1.1rem;
             font-weight: 700;
         }
 
-        .card-facts {
+        .acct-facts {
             display: flex;
             flex-wrap: wrap;
             gap: 4px 16px;
@@ -54,7 +54,7 @@
             font-size: 0.85rem;
         }
 
-        .card-facts strong { color: #e6e8eb; }
+        .acct-facts strong { color: #e6e8eb; }
 
         /* Amber, as for fixed expenses due soon on the budget page: money about
            to leave. */
@@ -63,10 +63,40 @@
             font-weight: 600;
         }
 
-        .card-meta, .debt-meta {
+        .acct-meta, .debt-meta {
             margin-top: 8px;
             color: #9ca3af;
             font-size: 0.8rem;
+        }
+
+        /* A section's own figures, under its heading. */
+        .acct-figures {
+            margin: -4px 0 12px;
+            color: #a8b3cf;
+            font-size: 0.9rem;
+        }
+
+        /* ----- Projected growth ----- */
+
+        .projection-table td:first-child { white-space: nowrap; }
+        .projection-table td:last-child { width: 40%; }
+
+        .projection-table .progress-bar {
+            height: 10px;
+            margin-bottom: 0;
+        }
+
+        .years-out {
+            display: block;
+            color: #9ca3af;
+            font-size: 0.75rem;
+            font-weight: 400;
+        }
+
+        /* Under 768px style.css gives every table a 600px minimum and lets it
+           scroll sideways. The projection is narrow enough to fit a phone. */
+        @media (max-width: 768px) {
+            .projection-table { min-width: 0; }
         }
 
         /* ----- Debt tracker ----- */
@@ -97,20 +127,51 @@
             <a href="/">Home</a>
             <a href="/budget.html">Budget</a>
             <a href="/all-expenses.html">Expenses</a>
-            <a href="/cards.html">Cards</a>
+            <a href="/accounts.html">Accounts</a>
+            <a href="/goals.html">Goals</a>
         </nav>
 
         <header class="flex">
-            <h1>💳 Cards</h1>
+            <h1>🏦 Accounts</h1>
         </header>
-
-        <div id="card-totals" class="summary"></div>
 
         <div class="section-head">
             <h2 class="section-title">Credit cards</h2>
             <button type="button" id="add-card-btn" class="small-btn">Add card</button>
         </div>
+        <div id="card-totals" class="summary"></div>
         <div id="card-list"><p class="empty-note">Loading cards...</p></div>
+
+        <div class="section-head">
+            <h2 class="section-title">Investment accounts</h2>
+            <button type="button" id="add-investment-btn" class="small-btn">Add account</button>
+        </div>
+        <p class="acct-figures" id="investment-figures"></p>
+        <div id="investment-list"></div>
+
+        <div class="section-head">
+            <h2 class="section-title">Retirement accounts</h2>
+            <button type="button" id="add-retirement-btn" class="small-btn">Add account</button>
+        </div>
+        <p class="acct-figures" id="retirement-figures"></p>
+        <div id="retirement-list"></div>
+
+        <div id="projection" style="display: none;">
+            <h2 class="section-title">Projected growth</h2>
+            <div class="table-container">
+                <table class="projection-table">
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th>Balance</th>
+                            <th>Growth</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="projection-tbody"></tbody>
+                </table>
+            </div>
+        </div>
 
         <div class="section-head">
             <h2 class="section-title">Debt tracker</h2>
@@ -158,6 +219,90 @@
                         <button type="button" id="card-delete" class="cancel-btn danger-btn">Delete</button>
                         <button type="button" class="cancel-btn" data-close="card-modal">Cancel</button>
                         <button type="button" id="card-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="investment-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="investment-modal-title">Add account</h3>
+                    <span class="close" data-close="investment-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="investment-name">Name</label>
+                        <input type="text" id="investment-name">
+                    </div>
+                    <div class="modal-field">
+                        <label for="investment-kind">Kind</label>
+                        <select id="investment-kind"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label for="investment-balance">Balance</label>
+                        <input type="number" id="investment-balance" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="investment-as-of">Balance as of</label>
+                        <input type="date" id="investment-as-of">
+                    </div>
+                    <div class="modal-field">
+                        <label for="investment-contribution">Monthly contribution</label>
+                        <input type="number" id="investment-contribution" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="investment-notes">Notes</label>
+                        <input type="text" id="investment-notes">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="investment-delete" class="cancel-btn danger-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="investment-modal">Cancel</button>
+                        <button type="button" id="investment-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="retirement-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="retirement-modal-title">Add account</h3>
+                    <span class="close" data-close="retirement-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="retirement-name">Name</label>
+                        <input type="text" id="retirement-name">
+                    </div>
+                    <div class="modal-field">
+                        <label for="retirement-kind">Kind</label>
+                        <select id="retirement-kind"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label for="retirement-balance">Balance</label>
+                        <input type="number" id="retirement-balance" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="retirement-as-of">Balance as of</label>
+                        <input type="date" id="retirement-as-of">
+                    </div>
+                    <div class="modal-field">
+                        <label for="retirement-return">Annual return (%)</label>
+                        <input type="number" id="retirement-return" step="0.01" min="-100" max="100">
+                    </div>
+                    <div class="modal-field">
+                        <label for="retirement-contribution">Monthly contribution</label>
+                        <input type="number" id="retirement-contribution" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="retirement-notes">Notes</label>
+                        <input type="text" id="retirement-notes">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="retirement-delete" class="cancel-btn danger-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="retirement-modal">Cancel</button>
+                        <button type="button" id="retirement-save" class="confirm-btn">Save</button>
                     </div>
                 </div>
             </div>
@@ -231,9 +376,12 @@
         </div>
     </div>
 
+    <script src="categories.js"></script>
     <script src="auth.js"></script>
     <script src="helpers.js"></script>
     <script src="cards.js"></script>
+    <script src="investments.js"></script>
+    <script src="retirement.js"></script>
     <script src="debts.js"></script>
 </body>
 </html>

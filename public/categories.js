@@ -50,6 +50,13 @@ const YEARLY_CATEGORIES = ['Tzedakah', 'Travel'];
 // before the next - rather than January to December.
 const HEBREW_YEAR_CATEGORIES = ['Tzedakah'];
 
+// The kinds of account on the Accounts page. Investments are only tracked;
+// retirement ones are also projected forward, which is why they are two lists
+// and two sections rather than one with a flag.
+const INVESTMENT_KINDS = ['Brokerage', 'Savings', 'CD', 'Crypto', 'Real estate', 'HSA', '529', 'Other'];
+
+const RETIREMENT_KINDS = ['401(k)', 'Roth IRA', 'Traditional IRA', '403(b)', 'SEP IRA', 'Pension', 'Other'];
+
 function goalPeriod(category) {
     return YEARLY_CATEGORIES.includes(category) ? 'yearly' : 'monthly';
 }
@@ -63,5 +70,5 @@ function fillCategorySelect(select, categories, placeholder) {
 }
 
 if (typeof module !== 'undefined') {
-    module.exports = { CATEGORIES, INCOME_CATEGORIES, YEARLY_CATEGORIES, HEBREW_YEAR_CATEGORIES, goalPeriod };
+    module.exports = { CATEGORIES, INCOME_CATEGORIES, YEARLY_CATEGORIES, HEBREW_YEAR_CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, goalPeriod };
 }

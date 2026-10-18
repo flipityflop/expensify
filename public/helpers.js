@@ -1,5 +1,5 @@
-// Small helpers shared by the budget and cards pages: money, escaping, local
-// dates, and closing modals.
+// Small helpers shared by the budget, accounts and goals pages: money,
+// escaping, local dates, and closing modals.
 //
 // Classic script: load it after auth.js and before the page's own scripts,
 // which share its top-level scope. The tests load it into their vm the same
@@ -21,6 +21,14 @@ function escapeHtml(text) {
 // tomorrow by the evening west of Greenwich.
 function isoDate(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// A stored YYYY-MM-DD for reading: "12 Oct 2026" in the browser's locale.
+// Built from local parts rather than parsed as a date, which would be read as
+// UTC and show the day before west of Greenwich.
+function shortDate(iso) {
+    const [year, month, day] = iso.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 // Every modal closes from its × and Cancel, which carry the id of the modal

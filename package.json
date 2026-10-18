@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node scripts/migrate-v3.js --selftest && node scripts/test-csv-roundtrip.js && node scripts/test-hebrew-calendar.js && node scripts/test-budget.js && node scripts/test-fixed-expenses.js && node scripts/test-cards.js && node scripts/test-debt.js"
+    "test": "node scripts/migrate-v3.js --selftest && node scripts/test-csv-roundtrip.js && node scripts/test-hebrew-calendar.js && node scripts/test-budget.js && node scripts/test-fixed-expenses.js && node scripts/test-accounts.js && node scripts/test-debt.js && node scripts/test-goals.js"
   },
   "keywords": [],
   "author": "",

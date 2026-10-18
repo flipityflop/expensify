@@ -1,9 +1,11 @@
-// Credit cards on the cards page: one row per card with what it costs to keep
-// - the balance, its APR and the interest that comes to, and the annual fee
-// and when it next renews. The debt tracker below it is debts.js.
+// Credit cards on the accounts page: one row per card with what it costs to
+// keep - the balance, its APR and the interest that comes to, and the annual
+// fee and when it next renews. The other sections of that page are
+// investments.js, retirement.js and debts.js.
 //
 // Loaded after helpers.js - classic scripts share one top-level scope, so
-// `money()`, `escapeHtml()` and `isoDate()` here are helpers.js's.
+// `money()`, `escapeHtml()`, `isoDate()` and `shortDate()` here are
+// helpers.js's.
 
 const cardList = document.getElementById('card-list');
 const cardTotals = document.getElementById('card-totals');
@@ -88,13 +90,6 @@ function daysFrom(from, to) {
     return Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
 }
 
-// Built from local parts rather than parsing the string as a date, which would
-// be read as UTC and show the day before west of Greenwich.
-function cardDate(iso) {
-    const [year, month, day] = iso.split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 // Highest APR first: money paid beyond the minimum saves the most interest
 // there. Cards with no APR set go last; ties by the larger balance.
 function sortCards(list) {
@@ -110,7 +105,7 @@ function renewalHtml(card, today) {
     const days = daysFrom(today, renewal);
     const when = days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
     return `<span${days <= RENEWAL_WARNING_DAYS ? ' class="renews-soon"' : ''}>`
-        + `${money(card.annual_fee)}/yr fee · renews ${cardDate(renewal)} (${when})</span>`;
+        + `${money(card.annual_fee)}/yr fee · renews ${shortDate(renewal)} (${when})</span>`;
 }
 
 // Only what is known: a card with no APR or fee set shows neither.
@@ -123,14 +118,14 @@ function cardRowHtml(card, today) {
     ].filter(Boolean);
 
     return `
-        <div class="card-row">
-            <div class="card-row-head">
-                <span class="card-name">${escapeHtml(card.name)}</span>
-                <span class="card-balance">${money(card.balance)}</span>
+        <div class="acct-row">
+            <div class="acct-row-head">
+                <span class="acct-name">${escapeHtml(card.name)}</span>
+                <span class="acct-figure">${money(card.balance)}</span>
                 <button type="button" class="small-btn" data-card-edit="${card.id}">Edit</button>
             </div>
-            ${facts.length ? `<div class="card-facts">${facts.map(f => `<span>${f}</span>`).join('')}</div>` : ''}
-            <div class="card-meta">${card.balance_as_of ? `as of ${cardDate(card.balance_as_of)}` : ''}${card.balance_as_of && card.notes ? ' · ' : ''}${card.notes ? escapeHtml(card.notes) : ''}</div>
+            ${facts.length ? `<div class="acct-facts">${facts.map(f => `<span>${f}</span>`).join('')}</div>` : ''}
+            <div class="acct-meta">${card.balance_as_of ? `as of ${shortDate(card.balance_as_of)}` : ''}${card.balance_as_of && card.notes ? ' · ' : ''}${card.notes ? escapeHtml(card.notes) : ''}</div>
         </div>
     `;
 }

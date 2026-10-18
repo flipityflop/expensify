@@ -31,7 +31,7 @@ function logout() {
 //
 // On a phone the tab bar slides sideways (style.css), so the current page's
 // tab is also scrolled to the middle of the bar, where the bar's own snapping
-// would rest it - otherwise the Cards page would open with its own tab out of
+// would rest it - otherwise the Goals page would open with its own tab out of
 // sight - and the bar is told which edges have more tabs past them, which it
 // fades.
 document.addEventListener('DOMContentLoaded', () => {

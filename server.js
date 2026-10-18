@@ -3,7 +3,7 @@ const express = require('express');
 const { createClient } = require('@libsql/client');
 const cors = require('cors');
 const path = require('path');
-const { CATEGORIES, goalPeriod } = require('./public/categories.js');
+const { CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, goalPeriod } = require('./public/categories.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -104,6 +104,48 @@ const initPromise = (async () => {
         apr REAL,
         annual_fee REAL NOT NULL DEFAULT 0,
         fee_renewal TEXT,
+        notes TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // An investment account is only tracked: `balance` is what it is worth and
+    // `contribution` what goes into it each month. `kind` is one of
+    // INVESTMENT_KINDS.
+    await db.execute(`CREATE TABLE IF NOT EXISTS investment_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'Brokerage',
+        balance REAL NOT NULL DEFAULT 0,
+        balance_as_of TEXT,
+        contribution REAL NOT NULL DEFAULT 0,
+        notes TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // A retirement account is the same, plus the rate it is expected to grow
+    // at: `annual_return` is a percentage (7 for 7%), null when not set, and
+    // the page compounds it monthly to project the balance forward.
+    await db.execute(`CREATE TABLE IF NOT EXISTS retirement_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT '401(k)',
+        balance REAL NOT NULL DEFAULT 0,
+        balance_as_of TEXT,
+        annual_return REAL,
+        contribution REAL NOT NULL DEFAULT 0,
+        notes TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // A savings goal: `target` by `target_date`, with `saved` put by so far.
+    // The monthly amount needed is worked out on the Goals page rather than
+    // stored, so it follows the date closing in.
+    await db.execute(`CREATE TABLE IF NOT EXISTS savings_goals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        target REAL NOT NULL,
+        target_date TEXT NOT NULL,
+        saved REAL NOT NULL DEFAULT 0,
         notes TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
@@ -580,6 +622,233 @@ app.delete('/api/credit-cards/:id', requireAuth, async (req, res) => {
     }
 });
 
+// Investment and retirement accounts
+//
+// Both take the same fields bar the rate of return, so one validation function
+// serves both and the retirement one adds to it. `kind` is checked against the
+// list the selects are filled from, so a kind that could never be chosen again
+// is refused rather than stored out of sight.
+function accountFields({ name, kind, balance, balance_as_of, contribution, notes }, kinds) {
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    if (!kinds.includes(kind)) return { error: `kind must be one of: ${kinds.join(', ')}` };
+    const worth = isBlank(balance) ? 0 : Number(balance);
+    if (!(worth >= 0)) return { error: 'balance must be 0 or more' };
+    const monthly = isBlank(contribution) ? 0 : Number(contribution);
+    if (!(monthly >= 0)) return { error: 'contribution must be 0 or more' };
+    const asOf = isBlank(balance_as_of) ? todayISO() : balance_as_of;
+    if (!isDate(asOf)) return { error: 'balance_as_of must be a YYYY-MM-DD date' };
+    return { args: [cleanName, kind, worth, asOf, monthly, (notes || '').trim()] };
+}
+
+function investmentFields(body) {
+    return accountFields(body, INVESTMENT_KINDS);
+}
+
+// A negative return is allowed: a pessimistic projection is still a projection.
+function retirementFields(body) {
+    const base = accountFields(body, RETIREMENT_KINDS);
+    if (base.error) return base;
+    const [name, kind, worth, asOf, monthly, notes] = base.args;
+    const rate = isBlank(body.annual_return) ? null : Number(body.annual_return);
+    if (rate !== null && !(rate >= -100 && rate <= 100)) {
+        return { error: 'annual_return must be a percentage, -100-100' };
+    }
+    return { args: [name, kind, worth, asOf, rate, monthly, notes] };
+}
+
+app.get('/api/investment-accounts', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM investment_accounts ORDER BY id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/investment-accounts', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = investmentFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO investment_accounts (name, kind, balance, balance_as_of, contribution, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Investment account added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/investment-accounts/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = investmentFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE investment_accounts SET name = ?, kind = ?, balance = ?, balance_as_of = ?, contribution = ?, notes = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Investment account not found' });
+        res.json({ message: 'Investment account saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/investment-accounts/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM investment_accounts WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Investment account not found' });
+        res.json({ message: 'Investment account deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/retirement-accounts', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM retirement_accounts ORDER BY id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/retirement-accounts', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = retirementFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO retirement_accounts (name, kind, balance, balance_as_of, annual_return, contribution, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Retirement account added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/retirement-accounts/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = retirementFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE retirement_accounts SET name = ?, kind = ?, balance = ?, balance_as_of = ?, annual_return = ?, contribution = ?, notes = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Retirement account not found' });
+        res.json({ message: 'Retirement account saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/retirement-accounts/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM retirement_accounts WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Retirement account not found' });
+        res.json({ message: 'Retirement account deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Savings goals
+//
+// Shared validation for the create and update routes, as with debts. `saved` is
+// capped at the target: a goal cannot be more than met.
+function goalFields({ name, target, target_date, saved, notes }) {
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    if (isBlank(target) || isNaN(Number(target)) || Number(target) <= 0) {
+        return { error: 'target must be a positive number' };
+    }
+    if (!isDate(target_date)) return { error: 'target_date must be a YYYY-MM-DD date' };
+    const put_by = isBlank(saved) ? 0 : Number(saved);
+    if (!(put_by >= 0)) return { error: 'saved must be 0 or more' };
+    return { args: [cleanName, Number(target), target_date, Math.min(put_by, Number(target)), (notes || '').trim()] };
+}
+
+app.get('/api/savings-goals', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM savings_goals ORDER BY target_date, id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/savings-goals', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = goalFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO savings_goals (name, target, target_date, saved, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Goal added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/savings-goals/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = goalFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE savings_goals SET name = ?, target = ?, target_date = ?, saved = ?, notes = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Goal not found' });
+        res.json({ message: 'Goal saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Putting money by adds to what is saved and is capped at the target, as a debt
+// payoff is capped at its total.
+app.post('/api/savings-goals/:id/save', requireAuth, async (req, res) => {
+    await initPromise;
+    const amount = Number(req.body.amount);
+    if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ error: 'a positive amount is required' });
+    }
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE savings_goals SET saved = MIN(target, saved + ?), updated_at = ? WHERE id = ?',
+            args: [amount, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Goal not found' });
+        res.json({ message: 'Saving recorded' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/savings-goals/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM savings_goals WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Goal not found' });
+        res.json({ message: 'Goal deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Delete expense
 app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     await initPromise;
@@ -590,6 +859,10 @@ app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// The cards page became the accounts page; a phone shortcut saved to the old
+// address still lands somewhere.
+app.get('/cards.html', (req, res) => res.redirect(301, '/accounts.html'));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));

@@ -98,7 +98,43 @@ CREATE TABLE credit_cards (
     notes TEXT,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE investment_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'Brokerage',    -- one of INVESTMENT_KINDS
+    balance REAL NOT NULL DEFAULT 0,           -- what it is worth now
+    balance_as_of TEXT,                        -- YYYY-MM-DD the balance was read
+    contribution REAL NOT NULL DEFAULT 0,      -- paid in each month
+    notes TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE retirement_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT '401(k)',       -- one of RETIREMENT_KINDS
+    balance REAL NOT NULL DEFAULT 0,
+    balance_as_of TEXT,
+    annual_return REAL,                        -- percentage, e.g. 7; null = not known
+    contribution REAL NOT NULL DEFAULT 0,      -- paid in each month
+    notes TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE savings_goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    target REAL NOT NULL,                      -- what it costs
+    target_date TEXT NOT NULL,                 -- YYYY-MM-DD it is wanted by
+    saved REAL NOT NULL DEFAULT 0,             -- put by so far; left = target - saved
+    notes TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
+
+The monthly amount a goal needs is worked out on the Goals page, not stored, so
+it follows the date closing in.
 
 The monthly plan on the budget page is three reserved rows in `budget_goals`,
 kept out of the category list by their leading underscores:
@@ -142,6 +178,22 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `POST` | `/api/credit-cards` | Add a card |
 | `PUT` | `/api/credit-cards/:id` | Replace a card's name, balance and its as-of date, APR, annual fee, renewal date and notes |
 | `DELETE` | `/api/credit-cards/:id` | Delete by id |
+| `GET` | `/api/investment-accounts` | All investment accounts |
+| `POST` | `/api/investment-accounts` | Add one |
+| `PUT` | `/api/investment-accounts/:id` | Replace its name, kind, balance and as-of date, monthly contribution and notes |
+| `DELETE` | `/api/investment-accounts/:id` | Delete by id |
+| `GET` | `/api/retirement-accounts` | All retirement accounts |
+| `POST` | `/api/retirement-accounts` | Add one |
+| `PUT` | `/api/retirement-accounts/:id` | As above, plus the annual rate of return |
+| `DELETE` | `/api/retirement-accounts/:id` | Delete by id |
+| `GET` | `/api/savings-goals` | All savings goals, soonest first |
+| `POST` | `/api/savings-goals` | Add a goal |
+| `PUT` | `/api/savings-goals/:id` | Replace a goal's name, target, date, saved amount and notes |
+| `POST` | `/api/savings-goals/:id/save` | Add to what is put by |
+| `DELETE` | `/api/savings-goals/:id` | Delete by id |
+
+`/cards.html` redirects to `/accounts.html`, for shortcuts saved before the
+page was renamed.
 
 ## Categories
 
@@ -154,6 +206,10 @@ scripts both read that file. Add a category there and nowhere else.
 
 Income is the `is_positive` toggle, not a category; the list above is the income
 sub-type, a separate dimension only reachable behind that toggle.
+
+The same file holds the kinds of account on the Accounts page —
+`INVESTMENT_KINDS` and `RETIREMENT_KINDS`. They fill the modals' selects and are
+what the server checks a saved account's `kind` against.
 
 Budgets are monthly and worked out from fixed expenses and past spending,
 except **Tzedakah** and **Travel**, whose goals are yearly and typed
@@ -184,22 +240,27 @@ expensify-site/
 │   ├── test-hebrew-calendar.js
 │   ├── test-budget.js
 │   ├── test-fixed-expenses.js
-│   ├── test-cards.js
-│   └── test-debt.js
+│   ├── test-accounts.js
+│   ├── test-debt.js
+│   └── test-goals.js
 └── public/                # Served by Express static middleware
     ├── index.html         # Main entry form
     ├── login.html
     ├── budget.html        # Goals vs actual, per month
     ├── all-expenses.html  # Filter / chart / export view
-    ├── cards.html         # Credit cards + debt tracker
-    ├── categories.js      # THE category list - browser and scripts both read it
+    ├── accounts.html      # Cards, investments, retirement + debt tracker
+    ├── goals.html         # Savings goals and the monthly amount each needs
+    ├── categories.js      # THE category list + account kinds - browser and scripts read it
     ├── hebrew-calendar.js # Rosh Hashanah for any year, for Tzedakah's year
     ├── auth.js            # Shared auth helpers + active-tab marking and sliding
-    ├── helpers.js         # money, escaping, local dates, modal closing (budget + cards)
+    ├── helpers.js         # money, escaping, local dates, modal closing (budget, accounts, goals)
     ├── script.js
     ├── budget.js
-    ├── cards.js           # Credit cards section of the cards page
-    ├── debts.js           # Debt tracker section of the cards page
+    ├── cards.js           # Credit cards section of the accounts page
+    ├── investments.js     # Investment accounts section
+    ├── retirement.js      # Retirement accounts section + the growth projection
+    ├── debts.js           # Debt tracker section of the accounts page
+    ├── goals.js
     ├── fixed-expenses.js  # Fixed expenses: the modal, opened rows, due-date schedule
     ├── all-expenses.js
     └── style.css
@@ -216,11 +277,12 @@ node scripts/test-csv-roundtrip.js      # export -> import survives a round trip
 node scripts/test-hebrew-calendar.js    # Rosh Hashanah against published dates
 node scripts/test-budget.js             # worked-out budgets, targets, plan, Tzedakah's year
 node scripts/test-fixed-expenses.js     # next due dates, opened rows, schedule
-node scripts/test-cards.js              # card interest, fee renewal, order, totals
+node scripts/test-accounts.js           # card interest, fee renewal, order, totals, projection
 node scripts/test-debt.js               # debt remaining + bar arithmetic
+node scripts/test-goals.js              # months left, the monthly amount needed, the bar
 ```
 
-`npm test` runs all seven. The first needs `TURSO_*` set; the others do not
+`npm test` runs all eight. The first needs `TURSO_*` set; the others do not
 touch the database.
 
 ## Deployment

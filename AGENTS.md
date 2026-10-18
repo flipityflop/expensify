@@ -30,8 +30,8 @@ code comments, not on the page.
 - Saying a value is "not set". Leave it out instead: a card with no APR shows
   no APR, and a fixed expense with no due date shows no date.
 
-`scripts/test-fixed-expenses.js` and `scripts/test-cards.js` assert some of the
-removed text stays out.
+`scripts/test-fixed-expenses.js`, `scripts/test-accounts.js` and
+`scripts/test-goals.js` assert some of the removed text stays out.
 
 ## How the pages work
 
@@ -127,7 +127,13 @@ ones with no date go last.
 **Progress bar.** Monthly budgets plus a twelfth of each yearly goal, against
 this month's spending.
 
-### Cards
+### Accounts
+
+Four sections, one page: credit cards, investment accounts, retirement accounts
+and the debt tracker. Every section's rows share one look (`.acct-row`), and its
+own figures sit under its heading.
+
+#### Credit cards
 
 **Order.** Highest APR first, since extra payments save the most there. Cards
 with no APR go last; ties go to the larger balance.
@@ -146,10 +152,62 @@ with no APR go last; ties go to the larger balance.
 - Amber within 30 days: the time to ask for a retention offer or cancel
   before the fee posts.
 
-**Balance date.** Typing a new balance sets its as-of date to today.
+**Balance date.** Typing a new balance sets its as-of date to today, as it does
+for an investment or retirement account.
 
-**Debt tracker.** The bar shows what is still owed, so it empties as the debt
-is paid down. Payoff adds to the paid amount and moves the as-of date.
+#### Investment accounts
+
+Tracked, not projected: a kind, what it is worth, the date that was read, and
+what goes in each month. The kinds are `INVESTMENT_KINDS` in `categories.js`,
+which the server checks a saved account against.
+
+- Largest balance first.
+- The figures under the heading are the balance, and the monthly contributions
+  when there are any.
+
+#### Retirement accounts
+
+The same fields plus the annual rate of return, typed by hand - nothing here
+guesses at a market.
+
+- The rate is a percentage a year. It may be negative: a pessimistic projection
+  is still a projection. An account with no rate shows none, and grows only by
+  what is paid in.
+
+**Projected growth.** The combined balance at 1, 5, 10, 15, 20, 25 and 30 years
+(`PROJECTION_YEARS` in `retirement.js`).
+
+- Each account is compounded monthly at its own rate, with its contribution
+  paid in at the end of each month: the usual future value of a balance plus an
+  annuity.
+- **Growth** is what is left after today's balance and everything paid in, so
+  the three figures always add up.
+- The bar is that year's balance against the furthest year's, so the rows read
+  as one curve.
+- The table is hidden when there is nothing to project.
+
+#### Debt tracker
+
+The bar shows what is still owed, so it empties as the debt is paid down.
+Payoff adds to the paid amount and moves the as-of date.
+
+### Goals
+
+A goal is an amount, a date it is wanted by, and what has been put by so far.
+The page works out what has to go by each month to get there.
+
+- **Months left** is whole calendar months from today to the date. A date later
+  in its month counts that month; an earlier one does not.
+- **The monthly amount** is what is left spread over those months, and all of
+  it at once with less than a month to go - never a division by zero or by a
+  negative.
+- A goal already met asks for nothing a month, whatever its date.
+- A date gone by with money still to find is red.
+- The bar fills as the money goes by, the opposite way round to a debt bar.
+- The line under the tiles appears only when the goals need more a month than
+  the budget plan's savings row sets aside - money that would have to come from
+  somewhere else.
+- Put by adds to what is saved, capped at the target, as a debt payoff is.
 
 ### Tab bar
 
@@ -163,9 +221,10 @@ is paid down. Payoff adds to the paid amount and moves the as-of date.
 
 - **Script loading.** Pages load classic scripts that share one global scope,
   in the order the HTML lists them.
-  - `categories.js` is the only category list.
-  - `helpers.js` has `money()`, `escapeHtml()`, `isoDate()` and the
-    modal-closing listener.
+  - `categories.js` is the only category list, and the only list of account
+    kinds.
+  - `helpers.js` has `money()`, `escapeHtml()`, `isoDate()`, `shortDate()` and
+    the modal-closing listener.
   - Top-level names must be unique across every script a page loads.
 - **Tests.** `npm test` runs the shipped files in a `vm` with a stub DOM, with
   no database. Each page test loads that page's scripts together, so a name
