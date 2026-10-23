@@ -261,7 +261,8 @@ function renderTable() {
                 <td>${expense.what}</td>
                 <td>${expense.merchant || '-'}</td>
                 <td>${expense.event || '-'}</td>
-                <td>
+                <td class="row-actions">
+                    ${receiptButtonHtml(expense, 'receipt-action')}
                     <button class="delete-action" onclick="deleteExpense(${expense.id})" title="Delete">
                         🗑️
                     </button>
@@ -315,8 +316,17 @@ function updateTzedakah() {
     document.getElementById('tzedakah-given').textContent = `$${v2Tzedakah.toFixed(2)}`;
 }
 
+// Called by receipts.js once a row's receipts have changed.
+function receiptsChanged(expenseId, count) {
+    const expense = allExpenses.find(e => e.id === expenseId);
+    if (!expense) return;
+    expense.receipt_count = count;
+    applyFilters();
+}
+
 async function deleteExpense(id) {
-    if (!confirm('Are you sure you want to delete this expense?')) {
+    const expense = allExpenses.find(e => e.id === id);
+    if (!confirm(deleteExpenseQuestion(expense ? expense.receipt_count : 0))) {
         return;
     }
       try {

@@ -19,8 +19,37 @@ Required in both `.env` (local) and Vercel dashboard (production):
 | `TURSO_DATABASE_URL` | Turso database URL (use `https://` prefix, not `libsql://`, for serverless) |
 | `TURSO_AUTH_TOKEN` | Turso auth token (generate via Turso dashboard) |
 | `APP_PASSWORD` | Password to log into the app |
+| `R2_ACCOUNT_ID` | Cloudflare account ID, from the R2 overview page (receipts) |
+| `R2_ACCESS_KEY_ID` | R2 API token's access key ID (receipts) |
+| `R2_SECRET_ACCESS_KEY` | R2 API token's secret (receipts) |
+| `R2_BUCKET` | Name of the receipts bucket |
+
+The four `R2_*` are optional: without them the app runs and receipts answer
+"Receipt storage is not set up". `R2_ENDPOINT` replaces the R2 address with
+another S3-compatible store, for trying receipts out locally.
 
 See `.env.example` for the template.
+
+## Receipt storage (Cloudflare R2)
+
+1. In the Cloudflare dashboard, **R2 Object Storage → Create bucket**. Leave
+   public access and the `r2.dev` URL off: the app hands out signed URLs.
+2. The bucket's **Settings → CORS policy**, with the site's own address:
+   ```json
+   [
+     {
+       "AllowedOrigins": ["https://your-app.vercel.app", "http://localhost:3000"],
+       "AllowedMethods": ["PUT", "GET", "HEAD"],
+       "AllowedHeaders": ["content-type"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+   Without it the phone's uploads fail even though the signed URLs are good.
+3. **Manage API tokens → Create API token**: Object Read & Write, applied to
+   this bucket only. Its secret is shown once.
+4. Put the account ID, both keys and the bucket name in Vercel's environment
+   variables and in `.env`.
 
 ## Local Development
 
@@ -131,6 +160,18 @@ CREATE TABLE savings_goals (
     notes TEXT,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE receipts (                        -- a photo kept against an expense
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    expense_id INTEGER NOT NULL,
+    original_key TEXT NOT NULL,                -- R2 key: receipts/<expense id>/<uuid>.<ext>, as uploaded
+    view_key TEXT NOT NULL,                    -- R2 key of the JPEG copy: <uuid>-view.jpg beside it
+    sha256 TEXT NOT NULL,                      -- of the original as R2 holds it, worked out by the server
+    mime TEXT,
+    bytes INTEGER,
+    uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (expense_id, sha256)                -- the same photo is stored once per expense
+);
 ```
 
 The monthly amount a goal needs is worked out on the Goals page, not stored, so
@@ -153,9 +194,13 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/api/login` | Validates password, returns it as token |
-| `GET` | `/api/expenses` | All expenses, newest first |
+| `GET` | `/api/expenses` | All expenses, newest first, each with its `receipt_count` |
 | `POST` | `/api/expenses` | Add an expense (always written with `version = 2`) |
-| `DELETE` | `/api/expenses/:id` | Delete by id |
+| `DELETE` | `/api/expenses/:id` | Delete by id, with its receipts' files |
+| `POST` | `/api/expenses/:id/receipts/upload` | Signed upload URLs for one photo and its copy, good for 10 minutes |
+| `POST` | `/api/expenses/:id/receipts` | Record an upload once both files are in the bucket |
+| `GET` | `/api/expenses/:id/receipts` | An expense's receipts, with signed URLs good for an hour |
+| `DELETE` | `/api/receipts/:id` | Delete a receipt and its files |
 | `GET` | `/api/autocomplete/what?q=` | Suggest descriptions |
 | `GET` | `/api/autocomplete/merchant?q=` | Suggest merchants |
 | `GET` | `/api/autocomplete/event?q=` | Suggest events |
@@ -242,7 +287,8 @@ expensify-site/
 │   ├── test-fixed-expenses.js
 │   ├── test-accounts.js
 │   ├── test-debt.js
-│   └── test-goals.js
+│   ├── test-goals.js
+│   └── test-receipts.js
 └── public/                # Served by Express static middleware
     ├── index.html         # Main entry form
     ├── login.html
@@ -253,7 +299,8 @@ expensify-site/
     ├── categories.js      # THE category list + account kinds - browser and scripts read it
     ├── hebrew-calendar.js # Rosh Hashanah for any year, for Tzedakah's year
     ├── auth.js            # Shared auth helpers + active-tab marking and sliding
-    ├── helpers.js         # money, escaping, local dates, modal closing (budget, accounts, goals)
+    ├── helpers.js         # money, escaping, local dates, modal closing (every page but login)
+    ├── receipts.js        # Receipt photos: upload, the row button, the viewer (home + expenses)
     ├── script.js
     ├── budget.js
     ├── cards.js           # Credit cards section of the accounts page
@@ -280,9 +327,10 @@ node scripts/test-fixed-expenses.js     # next due dates, opened rows, schedule
 node scripts/test-accounts.js           # card interest, fee renewal, order, totals, projection
 node scripts/test-debt.js               # debt remaining + bar arithmetic
 node scripts/test-goals.js              # months left, the monthly amount needed, the bar
+node scripts/test-receipts.js           # viewing copy size, file types, row button, viewer
 ```
 
-`npm test` runs all eight. The first needs `TURSO_*` set; the others do not
+`npm test` runs all nine. The first needs `TURSO_*` set; the others do not
 touch the database.
 
 ## Deployment

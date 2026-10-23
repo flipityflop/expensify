@@ -1,5 +1,5 @@
-// Small helpers shared by the budget, accounts and goals pages: money,
-// escaping, local dates, and closing modals.
+// Small helpers shared by every page but the login: money, escaping, local
+// dates, and closing modals.
 //
 // Classic script: load it after auth.js and before the page's own scripts,
 // which share its top-level scope. The tests load it into their vm the same

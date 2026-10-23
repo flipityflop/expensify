@@ -1,7 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const { createClient } = require('@libsql/client');
+const { AwsClient } = require('aws4fetch');
 const cors = require('cors');
+const crypto = require('crypto');
 const path = require('path');
 const { CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, goalPeriod } = require('./public/categories.js');
 
@@ -19,6 +21,22 @@ if (!APP_PASSWORD || !TURSO_DATABASE_URL || !TURSO_AUTH_TOKEN) {
 }
 
 const db = createClient({ url: TURSO_DATABASE_URL, authToken: TURSO_AUTH_TOKEN });
+
+// Receipt photos live in a Cloudflare R2 bucket, reached through its S3 API.
+// Optional: without these the rest of the app runs and the receipt routes
+// answer 503. R2_ENDPOINT points at another S3-compatible store instead, for
+// trying receipts out locally.
+const R2_BUCKET = process.env.R2_BUCKET;
+const R2_ENDPOINT = process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+const r2 = R2_BUCKET && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
+    && (process.env.R2_ENDPOINT || process.env.R2_ACCOUNT_ID)
+    ? new AwsClient({
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        service: 's3',
+        region: 'auto'
+    })
+    : null;
 
 // Runs once on cold start; every handler awaits this before touching the DB
 const initPromise = (async () => {
@@ -149,6 +167,24 @@ const initPromise = (async () => {
         notes TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    // A photo of a receipt, kept against one expense. It is two objects in R2:
+    // the original exactly as uploaded, which is the proof, and a JPEG copy
+    // `view_key` for looking at. `sha256` is of the original as R2 holds it,
+    // worked out by the server, so it vouches for the stored file rather than
+    // for what the browser said it sent. The same photo can go on two
+    // expenses - one receipt split across two categories.
+    await db.execute(`CREATE TABLE IF NOT EXISTS receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        expense_id INTEGER NOT NULL,
+        original_key TEXT NOT NULL,
+        view_key TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        mime TEXT,
+        bytes INTEGER,
+        uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (expense_id, sha256)
+    )`);
 })();
 
 // Convert libsql Row objects to plain JS objects for JSON serialization
@@ -184,7 +220,9 @@ app.post('/api/login', (req, res) => {
 app.get('/api/expenses', requireAuth, async (req, res) => {
     await initPromise;
     try {
-        const result = await db.execute('SELECT * FROM expenses ORDER BY id DESC');
+        const result = await db.execute(`SELECT e.*,
+            (SELECT COUNT(*) FROM receipts r WHERE r.expense_id = e.id) AS receipt_count
+            FROM expenses e ORDER BY e.id DESC`);
         res.json(toRows(result));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -849,10 +887,186 @@ app.delete('/api/savings-goals/:id', requireAuth, async (req, res) => {
     }
 });
 
+// Receipts
+//
+// The browser uploads straight to R2 through short-lived signed URLs, which
+// keeps photos out of the Vercel function and its 4.5 MB request limit, then
+// asks for the upload to be recorded. Nothing is recorded that is not in the
+// bucket. The bucket stays private: the page is handed signed URLs to look at
+// a receipt, since an <img> cannot send the login token.
+const RECEIPT_MAX_BYTES = 25 * 1024 * 1024;
+// receipts/<expense id>/<uuid>.<ext>, the only shape of key the upload route
+// hands out.
+const RECEIPT_KEY = /^receipts\/(\d+)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z]+$/;
+// The types a phone or a screenshot hands over, and the extension each is
+// stored under.
+const RECEIPT_EXTENSIONS = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/heic': 'heic',
+    'image/heif': 'heif', 'image/webp': 'webp', 'image/gif': 'gif'
+};
+
+function requireR2(req, res, next) {
+    if (r2) next();
+    else res.status(503).json({ error: 'Receipt storage is not set up' });
+}
+
+function r2Url(key) {
+    return `${R2_ENDPOINT}/${R2_BUCKET}/${key}`;
+}
+
+async function r2Signed(key, method, seconds) {
+    const url = new URL(r2Url(key));
+    url.searchParams.set('X-Amz-Expires', String(seconds));
+    return (await r2.sign(url, { method, aws: { signQuery: true } })).url;
+}
+
+// The copy sits beside its original: <uuid>-view.jpg next to <uuid>.heic.
+function receiptViewKey(originalKey) {
+    return originalKey.replace(/\.[a-z]+$/, '-view.jpg');
+}
+
+// Deleting a key that is already gone succeeds, so a delete that failed half
+// way can simply be tried again.
+async function removeReceiptObjects(keys) {
+    for (const key of keys) {
+        const response = await r2.fetch(r2Url(key), { method: 'DELETE' });
+        if (!response.ok && response.status !== 404) throw new Error(`Receipt storage answered ${response.status}`);
+    }
+}
+
+async function expenseExists(id) {
+    const result = await db.execute({ sql: 'SELECT 1 FROM expenses WHERE id = ?', args: [id] });
+    return result.rows.length > 0;
+}
+
+function receiptUploadFields({ mime }) {
+    const extension = RECEIPT_EXTENSIONS[String(mime || '').toLowerCase()];
+    if (!extension) return { error: 'Not a photo' };
+    return { args: [extension] };
+}
+
+app.post('/api/expenses/:id/receipts/upload', requireAuth, requireR2, async (req, res) => {
+    await initPromise;
+    const { error, args } = receiptUploadFields(req.body);
+    if (error) return res.status(400).json({ error });
+    const expenseId = Number(req.params.id);
+    try {
+        if (!Number.isInteger(expenseId) || !(await expenseExists(expenseId))) {
+            return res.status(404).json({ error: 'Expense not found' });
+        }
+        const key = `receipts/${expenseId}/${crypto.randomUUID()}.${args[0]}`;
+        res.json({
+            key,
+            original_url: await r2Signed(key, 'PUT', 600),
+            view_url: await r2Signed(receiptViewKey(key), 'PUT', 600)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Records an upload once both files are in the bucket. The original is read
+// back to hash it. A photo already on this expense is not stored twice: the
+// new copy is removed and the one there kept.
+app.post('/api/expenses/:id/receipts', requireAuth, requireR2, async (req, res) => {
+    await initPromise;
+    const key = String(req.body.key || '');
+    const expenseId = Number(req.params.id);
+    const match = RECEIPT_KEY.exec(key);
+    if (!match || Number(match[1]) !== expenseId) {
+        return res.status(400).json({ error: 'key is not an upload for this expense' });
+    }
+    const viewKey = receiptViewKey(key);
+    try {
+        if (!(await expenseExists(expenseId))) {
+            await removeReceiptObjects([key, viewKey]);
+            return res.status(404).json({ error: 'Expense not found' });
+        }
+        const original = await r2.fetch(r2Url(key));
+        if (original.status === 404) {
+            await removeReceiptObjects([viewKey]);
+            return res.status(400).json({ error: 'Photo did not upload' });
+        }
+        if (!original.ok) throw new Error(`Receipt storage answered ${original.status}`);
+        const bytes = Buffer.from(await original.arrayBuffer());
+        const view = await r2.fetch(r2Url(viewKey), { method: 'HEAD' });
+        if (!view.ok) {
+            await removeReceiptObjects([key, viewKey]);
+            return res.status(400).json({ error: 'Photo did not upload' });
+        }
+        if (bytes.length > RECEIPT_MAX_BYTES) {
+            await removeReceiptObjects([key, viewKey]);
+            return res.status(400).json({ error: 'Photo is over 25 MB' });
+        }
+        const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+        const existing = await db.execute({
+            sql: 'SELECT id FROM receipts WHERE expense_id = ? AND sha256 = ?',
+            args: [expenseId, sha256]
+        });
+        if (existing.rows.length) {
+            await removeReceiptObjects([key, viewKey]);
+            return res.json({ id: Number(toRows(existing)[0].id), message: 'Receipt already attached' });
+        }
+        const result = await db.execute({
+            sql: 'INSERT INTO receipts (expense_id, original_key, view_key, sha256, mime, bytes, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            args: [expenseId, key, viewKey, sha256, original.headers.get('content-type') || '', bytes.length, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Receipt saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// An expense's receipts, oldest first, each with signed URLs good for an hour.
+app.get('/api/expenses/:id/receipts', requireAuth, requireR2, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({
+            sql: 'SELECT id, expense_id, original_key, view_key, sha256, mime, bytes, uploaded_at FROM receipts WHERE expense_id = ? ORDER BY id',
+            args: [req.params.id]
+        });
+        const receipts = await Promise.all(toRows(result).map(async receipt => ({
+            ...receipt,
+            original_url: await r2Signed(receipt.original_key, 'GET', 3600),
+            view_url: await r2Signed(receipt.view_key, 'GET', 3600)
+        })));
+        res.json(receipts);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Files first, then the row: if the files cannot be removed, the row stays to
+// say they are there.
+app.delete('/api/receipts/:id', requireAuth, requireR2, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'SELECT original_key, view_key FROM receipts WHERE id = ?', args: [req.params.id] });
+        if (!result.rows.length) return res.status(404).json({ error: 'Receipt not found' });
+        const { original_key, view_key } = toRows(result)[0];
+        await removeReceiptObjects([original_key, view_key]);
+        await db.execute({ sql: 'DELETE FROM receipts WHERE id = ?', args: [req.params.id] });
+        res.json({ message: 'Receipt deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Delete expense
+//
+// Its receipts go with it, files first, as above.
 app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     await initPromise;
     try {
+        const receipts = toRows(await db.execute({
+            sql: 'SELECT original_key, view_key FROM receipts WHERE expense_id = ?',
+            args: [req.params.id]
+        }));
+        if (receipts.length) {
+            if (!r2) return res.status(503).json({ error: 'Receipt storage is not set up' });
+            await removeReceiptObjects(receipts.flatMap(r => [r.original_key, r.view_key]));
+            await db.execute({ sql: 'DELETE FROM receipts WHERE expense_id = ?', args: [req.params.id] });
+        }
         await db.execute({ sql: 'DELETE FROM expenses WHERE id = ?', args: [req.params.id] });
         res.json({ message: 'Expense deleted successfully' });
     } catch (err) {

@@ -88,6 +88,16 @@
                     </label>
                 </div>
 
+                <div class="form-group">
+                    <label for="receipt-pick-btn">Receipt</label>
+                    <div class="receipt-picker">
+                        <button type="button" id="receipt-pick-btn" class="receipt-pick-btn">📷 Add</button>
+                        <div id="receipt-thumbs" class="receipt-thumbs"></div>
+                    </div>
+                    <!-- No capture attribute: the phone offers camera and library -->
+                    <input type="file" id="receipt-input" accept="image/*" multiple hidden>
+                </div>
+
                 <button type="submit" class="submit-btn">Add Expense</button>
             </form>
 
@@ -109,6 +119,8 @@
 
     <script src="categories.js"></script>
     <script src="auth.js"></script>
+    <script src="helpers.js"></script>
+    <script src="receipts.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node scripts/migrate-v3.js --selftest && node scripts/test-csv-roundtrip.js && node scripts/test-hebrew-calendar.js && node scripts/test-budget.js && node scripts/test-fixed-expenses.js && node scripts/test-accounts.js && node scripts/test-debt.js && node scripts/test-goals.js"
+    "test": "node scripts/migrate-v3.js --selftest && node scripts/test-csv-roundtrip.js && node scripts/test-hebrew-calendar.js && node scripts/test-budget.js && node scripts/test-fixed-expenses.js && node scripts/test-accounts.js && node scripts/test-debt.js && node scripts/test-goals.js && node scripts/test-receipts.js"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +14,7 @@
   "type": "commonjs",
   "dependencies": {
     "@libsql/client": "^0.14.0",
+    "aws4fetch": "^1.0.20",
     "cors": "^2.8.5",
     "express": "^5.1.0"
   },

@@ -209,6 +209,40 @@ The page works out what has to go by each month to get there.
   somewhere else.
 - Put by adds to what is saved, capped at the target, as a debt payoff is.
 
+### Receipts
+
+A receipt is a photo kept against one expense, as proof. There is no matching:
+it is taken with the expense or added from the expense's row.
+
+- **Where.** The entry form has a Receipt picker. Each row on the home page
+  and the Expenses page ends in 📎 (none yet, opens the picker) or 🧾 / 🧾N
+  (opens the viewer: each photo, Original, Remove, and Add). A consolidated
+  row has no button: it stands for several expenses.
+- **The picker.** `accept="image/*"` and no `capture` attribute, so the phone
+  offers its camera and its photo library. `capture` would go straight to the
+  camera. `test-receipts.js` checks it stays off.
+- **Two files per photo** in the R2 bucket:
+  - the original, byte for byte as the phone handed it over, the proof;
+  - a JPEG copy, long edge at most 3000 px and under 4 MB (Azure's free tier
+    limit, for reading text later). The viewer shows it. Drawing it through an
+    `<img>` turns the photo upright and turns HEIC into something every
+    browser shows.
+- **Upload.** The browser asks for signed URLs, puts both files straight into
+  the bucket (Vercel's 4.5 MB request limit never applies), then asks for the
+  upload to be recorded. The server checks both files are there, reads the
+  original back and stores its SHA-256. Nothing is recorded that is not in
+  the bucket.
+- **The entry form waits.** The expense is saved first, then its photos, and
+  the form resets only after both. If a photo fails the expense stays, the
+  message says so, and the row's 📎 tries again.
+- **The same photo twice** on one expense is stored once. It can go on two
+  expenses: one receipt split across two categories.
+- **Deleting** a receipt, or an expense with receipts, removes the files
+  first and the row after: if the files cannot be removed, the row is still
+  there to say they exist. The delete question names the receipts.
+- The bucket is private. An `<img>` cannot send the login token, so the page
+  gets signed URLs good for an hour.
+
 ### Tab bar
 
 - On a phone each tab keeps at least 30% of the width, so the bar slides
@@ -225,6 +259,9 @@ The page works out what has to go by each month to get there.
     kinds.
   - `helpers.js` has `money()`, `escapeHtml()`, `isoDate()`, `shortDate()` and
     the modal-closing listener.
+  - `receipts.js` builds the receipt picker and viewer into the page itself,
+    so the home and Expenses pages share one copy. The page defines
+    `receiptsChanged()` to redraw a row.
   - Top-level names must be unique across every script a page loads.
 - **Tests.** `npm test` runs the shipped files in a `vm` with a stub DOM, with
   no database. Each page test loads that page's scripts together, so a name
@@ -233,6 +270,8 @@ The page works out what has to go by each month to get there.
     them out as JSON before `deepStrictEqual`.
 - **Running without Turso.**
   `TURSO_DATABASE_URL=file:/tmp/x.db TURSO_AUTH_TOKEN=x APP_PASSWORD=pw node server.js`.
+  Receipts also need the `R2_*` variables; `R2_ENDPOINT` can point them at a
+  local S3-compatible store.
   Chart.js on the Expenses page comes from a CDN and may not load in a
   sandbox.
 - **Server conventions.**

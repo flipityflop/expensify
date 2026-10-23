@@ -19,6 +19,17 @@ const merchantSuggestions = document.getElementById('merchant-suggestions');
 const merchantChips = document.getElementById('merchant-chips');
 const eventSuggestions = document.getElementById('event-suggestions');
 
+// Receipt photos for the expense being entered, uploaded once it is saved.
+// The rest of receipts is receipts.js.
+const submitBtn = form.querySelector('.submit-btn');
+const receiptInput = document.getElementById('receipt-input');
+const receiptThumbs = document.getElementById('receipt-thumbs');
+let pendingReceipts = [];
+let receiptThumbUrls = [];
+
+// The recent list as last loaded, for redrawing a row's receipt button.
+let recentExpenses = [];
+
 // getAuthToken / getAuthHeaders / checkAuth / logout come from auth.js
 
 // Initialize app
@@ -73,6 +84,19 @@ function setupEventListeners() {
     eventInput.addEventListener('input', () => handleAutocomplete(eventInput, eventSuggestions, 'event'));
     eventInput.addEventListener('blur', () => setTimeout(() => hideSuggestions(eventSuggestions), 200));
 
+    document.getElementById('receipt-pick-btn').addEventListener('click', () => receiptInput.click());
+    receiptInput.addEventListener('change', () => {
+        pendingReceipts.push(...receiptInput.files);
+        receiptInput.value = '';
+        renderReceiptThumbs();
+    });
+    receiptThumbs.addEventListener('click', e => {
+        const index = e.target.dataset && e.target.dataset.unpick;
+        if (index === undefined) return;
+        pendingReceipts.splice(Number(index), 1);
+        renderReceiptThumbs();
+    });
+
     // Focus amount input on page load
     amountInput.focus();
 }
@@ -106,8 +130,22 @@ function changeDate(days) {
     dateInput.value = currentDate.toISOString().split('T')[0];
 }
 
+function renderReceiptThumbs() {
+    receiptThumbUrls.forEach(url => URL.revokeObjectURL(url));
+    receiptThumbUrls = pendingReceipts.map(file => URL.createObjectURL(file));
+    receiptThumbs.innerHTML = receiptThumbUrls.map((url, i) => `
+        <span class="receipt-thumb">
+            <img src="${url}" alt="Receipt">
+            <button type="button" class="receipt-unpick" data-unpick="${i}" aria-label="Remove">×</button>
+        </span>`).join('');
+}
+
 async function handleFormSubmit(e) {
     e.preventDefault();
+    // Held down until the photos are up as well: a second tap would add the
+    // expense twice.
+    const submitLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
       const formData = new FormData(form);
     const expenseData = {
         amount: parseFloat(formData.get('amount')),
@@ -137,8 +175,19 @@ async function handleFormSubmit(e) {
             body: JSON.stringify(expenseData)
         });
         
-        const result = await response.json();        if (response.ok) {
-            showMessage('Expense added successfully!', 'success');
+        const result = await response.json();
+        if (response.ok) {
+            // The form waits for the photos, so the page is not left mid-upload.
+            let receiptErrors = [];
+            if (pendingReceipts.length) {
+                submitBtn.textContent = 'Saving receipt…';
+                receiptErrors = await uploadReceipts(result.id, pendingReceipts);
+            }
+            if (receiptErrors.length) {
+                showMessage(`Expense added, receipt not saved: ${receiptErrors[0]}`, 'error');
+            } else {
+                showMessage('Expense added successfully!', 'success');
+            }
 
             // Save date and hold state before reset
             const currentDate = dateInput.value;
@@ -164,6 +213,9 @@ async function handleFormSubmit(e) {
             // Clear merchant suggestion chips
             merchantChips.innerHTML = '';
 
+            pendingReceipts = [];
+            renderReceiptThumbs();
+
             // Reload expenses
             loadExpenses();
             
@@ -174,6 +226,9 @@ async function handleFormSubmit(e) {
         }
     } catch (error) {
         showMessage('Network error. Please try again.', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitLabel;
     }
 }
 
@@ -285,6 +340,8 @@ async function loadExpenses() {
             headers: getAuthHeaders()
         });
         const expenses = await response.json();
+        // Only the first 10 make the recent list.
+        recentExpenses = expenses.slice(0, 10);
           if (expenses.length === 0) {
             expensesList.innerHTML = `
                 <div class="empty-state">
@@ -293,8 +350,6 @@ async function loadExpenses() {
                 </div>
             `;
         } else {
-            // Show only the first 10 expenses for recent expenses section
-            const recentExpenses = expenses.slice(0, 10);
             expensesList.innerHTML = recentExpenses.map(expense => createExpenseHTML(expense)).join('');
         }
     } catch (error) {
@@ -313,6 +368,7 @@ function createExpenseHTML(expense) {
     return `
         <div class="expense-item ${itemClass}">
             <button class="delete-btn" onclick="deleteExpense(${expense.id})" title="Delete expense">×</button>
+            ${receiptButtonHtml(expense, 'receipt-btn')}
             <div class="expense-line-1">
                 <span class="expense-what">${expense.what}</span>
                 <span class="expense-amount ${amountClass}">${amountPrefix}$${amount.toFixed(2)}</span>
@@ -328,8 +384,17 @@ function createExpenseHTML(expense) {
     `;
 }
 
+// Called by receipts.js once a row's receipts have changed.
+function receiptsChanged(expenseId, count) {
+    const expense = recentExpenses.find(e => e.id === expenseId);
+    if (!expense) return;
+    expense.receipt_count = count;
+    expensesList.innerHTML = recentExpenses.map(e => createExpenseHTML(e)).join('');
+}
+
 async function deleteExpense(id) {
-    if (!confirm('Are you sure you want to delete this expense?')) {
+    const expense = recentExpenses.find(e => e.id === id);
+    if (!confirm(deleteExpenseQuestion(expense ? expense.receipt_count : 0))) {
         return;
     }
     
