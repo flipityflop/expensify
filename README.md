@@ -122,6 +122,20 @@ CREATE TABLE retirement_accounts (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE life_insurance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'Term',         -- one of LIFE_INSURANCE_KINDS
+    insured TEXT,                              -- who is covered
+    death_benefit REAL NOT NULL DEFAULT 0,     -- what it pays out
+    premium REAL NOT NULL DEFAULT 0,           -- per `premium_frequency`
+    premium_frequency TEXT NOT NULL DEFAULT 'monthly', -- 'monthly' | 'yearly'
+    term_end TEXT,                             -- YYYY-MM-DD the cover stops; null = for life
+    cash_value REAL,                           -- built up in a permanent policy; null = none
+    notes TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE savings_goals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -186,6 +200,10 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `POST` | `/api/retirement-accounts` | Add one |
 | `PUT` | `/api/retirement-accounts/:id` | As above, plus the annual rate of return |
 | `DELETE` | `/api/retirement-accounts/:id` | Delete by id |
+| `GET` | `/api/life-insurance` | All life insurance policies |
+| `POST` | `/api/life-insurance` | Add a policy |
+| `PUT` | `/api/life-insurance/:id` | Replace its name, kind, insured, death benefit, premium and how often it is paid, term end, cash value and notes |
+| `DELETE` | `/api/life-insurance/:id` | Delete by id |
 | `GET` | `/api/savings-goals` | All savings goals, soonest first |
 | `POST` | `/api/savings-goals` | Add a goal |
 | `PUT` | `/api/savings-goals/:id` | Replace a goal's name, target, date, saved amount and notes |
@@ -208,8 +226,9 @@ Income is the `is_positive` toggle, not a category; the list above is the income
 sub-type, a separate dimension only reachable behind that toggle.
 
 The same file holds the kinds of account on the Accounts page —
-`INVESTMENT_KINDS` and `RETIREMENT_KINDS`. They fill the modals' selects and are
-what the server checks a saved account's `kind` against.
+`INVESTMENT_KINDS`, `RETIREMENT_KINDS` and `LIFE_INSURANCE_KINDS`. They fill the
+modals' selects and are what the server checks a saved account's or policy's
+`kind` against.
 
 Budgets are monthly and worked out from fixed expenses and past spending,
 except **Tzedakah** and **Travel**, whose goals are yearly and typed
@@ -248,7 +267,7 @@ expensify-site/
     ├── login.html
     ├── budget.html        # Goals vs actual, per month
     ├── all-expenses.html  # Filter / chart / export view
-    ├── accounts.html      # Cards, investments, retirement + debt tracker
+    ├── accounts.html      # Cards, investments, retirement, life insurance + debt tracker
     ├── goals.html         # Savings goals and the monthly amount each needs
     ├── categories.js      # THE category list + account kinds - browser and scripts read it
     ├── hebrew-calendar.js # Rosh Hashanah for any year, for Tzedakah's year
@@ -259,6 +278,7 @@ expensify-site/
     ├── cards.js           # Credit cards section of the accounts page
     ├── investments.js     # Investment accounts section
     ├── retirement.js      # Retirement accounts section + the growth projection
+    ├── life-insurance.js  # Life insurance section
     ├── debts.js           # Debt tracker section of the accounts page
     ├── goals.js
     ├── fixed-expenses.js  # Fixed expenses: the modal, opened rows, due-date schedule

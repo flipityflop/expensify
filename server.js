@@ -3,7 +3,7 @@ const express = require('express');
 const { createClient } = require('@libsql/client');
 const cors = require('cors');
 const path = require('path');
-const { CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, goalPeriod } = require('./public/categories.js');
+const { CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, LIFE_INSURANCE_KINDS, goalPeriod } = require('./public/categories.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -133,6 +133,25 @@ const initPromise = (async () => {
         balance_as_of TEXT,
         annual_return REAL,
         contribution REAL NOT NULL DEFAULT 0,
+        notes TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // A life insurance policy: `death_benefit` is what it pays out, and
+    // `premium` what it costs per `premium_frequency` ('monthly' | 'yearly').
+    // `term_end` is the day the cover stops, null for a policy that runs for
+    // life; `cash_value` is what a permanent policy has built up, null when it
+    // has none. `kind` is one of LIFE_INSURANCE_KINDS.
+    await db.execute(`CREATE TABLE IF NOT EXISTS life_insurance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'Term',
+        insured TEXT,
+        death_benefit REAL NOT NULL DEFAULT 0,
+        premium REAL NOT NULL DEFAULT 0,
+        premium_frequency TEXT NOT NULL DEFAULT 'monthly',
+        term_end TEXT,
+        cash_value REAL,
         notes TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
@@ -756,6 +775,78 @@ app.delete('/api/retirement-accounts/:id', requireAuth, async (req, res) => {
         const result = await db.execute({ sql: 'DELETE FROM retirement_accounts WHERE id = ?', args: [req.params.id] });
         if (!result.rowsAffected) return res.status(404).json({ error: 'Retirement account not found' });
         res.json({ message: 'Retirement account deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Life insurance
+//
+// Shared validation for the create and update routes, as with debts.
+function policyFields({ name, kind, insured, death_benefit, premium, premium_frequency, term_end, cash_value, notes }) {
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    if (!LIFE_INSURANCE_KINDS.includes(kind)) return { error: `kind must be one of: ${LIFE_INSURANCE_KINDS.join(', ')}` };
+    const benefit = isBlank(death_benefit) ? 0 : Number(death_benefit);
+    if (!(benefit >= 0)) return { error: 'death_benefit must be 0 or more' };
+    const cost = isBlank(premium) ? 0 : Number(premium);
+    if (!(cost >= 0)) return { error: 'premium must be 0 or more' };
+    const frequency = isBlank(premium_frequency) ? 'monthly' : premium_frequency;
+    if (!['monthly', 'yearly'].includes(frequency)) return { error: "premium_frequency must be 'monthly' or 'yearly'" };
+    const ends = isBlank(term_end) ? null : term_end;
+    if (ends !== null && !isDate(ends)) return { error: 'term_end must be a YYYY-MM-DD date' };
+    const cash = isBlank(cash_value) ? null : Number(cash_value);
+    if (cash !== null && !(cash >= 0)) return { error: 'cash_value must be 0 or more' };
+    return { args: [cleanName, kind, (insured || '').trim(), benefit, cost, frequency, ends, cash, (notes || '').trim()] };
+}
+
+app.get('/api/life-insurance', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM life_insurance ORDER BY id');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/life-insurance', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = policyFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO life_insurance (name, kind, insured, death_benefit, premium, premium_frequency, term_end, cash_value, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Policy added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/life-insurance/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = policyFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE life_insurance SET name = ?, kind = ?, insured = ?, death_benefit = ?, premium = ?, premium_frequency = ?, term_end = ?, cash_value = ?, notes = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Policy not found' });
+        res.json({ message: 'Policy saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/life-insurance/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM life_insurance WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Policy not found' });
+        res.json({ message: 'Policy deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -1,7 +1,8 @@
 // Checks the accounts page's arithmetic worth getting wrong: the monthly
 // interest estimate, the next annual-fee renewal rolled forward from a past
 // date, the order accounts are listed in, the totals across them, and the
-// balances projected forward from a rate of return.
+// balances projected forward from a rate of return, and which life insurance
+// policies still count.
 //
 //   node scripts/test-accounts.js
 //
@@ -32,7 +33,7 @@ const ctx = vm.createContext({
     console
 });
 
-for (const file of ['categories.js', 'auth.js', 'helpers.js', 'cards.js', 'investments.js', 'retirement.js', 'debts.js']) {
+for (const file of ['categories.js', 'auth.js', 'helpers.js', 'cards.js', 'investments.js', 'retirement.js', 'life-insurance.js', 'debts.js']) {
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, file), 'utf8'), ctx);
 }
 
@@ -190,5 +191,54 @@ assert.strictEqual(retTotals.contribution, 1500);
 const bareRetirement = call(`retirementRowHtml(${account({ balance: 500 })})`);
 assert.ok(!bareRetirement.includes('return'), bareRetirement);
 assert.ok(call(`retirementRowHtml(${account({ balance: 500, annual_return: 0 })})`).includes('0% return'));
+
+// ---- life insurance ------------------------------------------------------
+const policy = fields => JSON.stringify({
+    id: 1, name: 'Policy', kind: 'Term', insured: '', death_benefit: 500000, premium: 0,
+    premium_frequency: 'monthly', term_end: null, cash_value: null, notes: '', ...fields
+});
+
+// No end date runs for life; the last day of a term still counts.
+assert.strictEqual(call(`policyInForce(${policy({})}, '2026-10-12')`), true);
+assert.strictEqual(call(`policyInForce(${policy({ term_end: '2026-10-12' })}, '2026-10-12')`), true);
+assert.strictEqual(call(`policyInForce(${policy({ term_end: '2026-10-11' })}, '2026-10-12')`), false);
+
+assert.strictEqual(call(`monthlyPremium(${policy({ premium: 45 })})`), 45);
+assert.strictEqual(call(`monthlyPremium(${policy({ premium: 600, premium_frequency: 'yearly' })})`), 50);
+
+const policies = JSON.stringify([
+    JSON.parse(policy({ id: 1, name: 'Small', death_benefit: 100000, premium: 20 })),
+    JSON.parse(policy({ id: 2, name: 'Ended', death_benefit: 2000000, premium: 90, term_end: '2025-01-01' })),
+    JSON.parse(policy({ id: 3, name: 'Whole', kind: 'Whole', death_benefit: 250000, premium: 1200, premium_frequency: 'yearly', cash_value: 8000 })),
+    JSON.parse(policy({ id: 4, name: 'Big', death_benefit: 1000000, premium: 60, term_end: '2045-06-01' }))
+]);
+
+// Largest payout first, but a policy that has ended goes last however large.
+assert.deepStrictEqual(JSON.parse(call(`JSON.stringify(sortPolicies(${policies}, '2026-10-12').map(p => p.name))`)),
+    ['Big', 'Whole', 'Small', 'Ended']);
+
+// The ended policy neither covers nor costs anything.
+const policyTotals = JSON.parse(call(`JSON.stringify(policyTotalsOf(${policies}, '2026-10-12'))`));
+assert.strictEqual(policyTotals.coverage, 1350000);
+assert.strictEqual(policyTotals.premium, 20 + 100 + 60);
+assert.strictEqual(policyTotals.cashValue, 8000);
+
+const termEnd = (date, today) => call(`termEndHtml(${policy({ term_end: date })}, '${today}')`);
+assert.strictEqual(termEnd(null, '2026-10-12'), '');                                  // runs for life
+assert.ok(termEnd('2025-01-01', '2026-10-12').includes('term-ended'));
+const ending = termEnd('2027-02-09', '2026-10-12');
+assert.ok(ending.includes('renews-soon') && ending.includes('in 120 days'), ending);
+const farOff = termEnd('2045-06-01', '2026-10-12');
+assert.ok(!farOff.includes('renews-soon') && farOff.startsWith('ends '), farOff);
+
+const policyRow = call(`policyRowHtml(${policy({ name: 'Acme <Life>', insured: 'Sam', premium: 600, premium_frequency: 'yearly' })}, '2026-10-12')`);
+assert.ok(policyRow.includes('Acme &lt;Life&gt;'), 'policy name not escaped');
+assert.ok(policyRow.includes('$500000.00') && policyRow.includes('$600.00/yr premium') && policyRow.includes('Sam'), policyRow);
+
+// Nothing not known is shown: no premium, no cash value, no end date, no notes.
+const barePolicy = call(`policyRowHtml(${policy({})}, '2026-10-12')`);
+assert.ok(!barePolicy.includes('premium') && !barePolicy.includes('cash value')
+    && !barePolicy.includes('ends') && !barePolicy.includes('acct-meta'), barePolicy);
+assert.ok(call(`policyRowHtml(${policy({ cash_value: 0 })}, '2026-10-12')`).includes('$0.00 cash value'));
 
 console.log('accounts: all assertions pass');

@@ -129,8 +129,8 @@ this month's spending.
 
 ### Accounts
 
-Four sections, one page: credit cards, investment accounts, retirement accounts
-and the debt tracker. Every section's rows share one look (`.acct-row`), and its
+Five sections, one page: credit cards, investment accounts, retirement
+accounts, life insurance and the debt tracker. Every section's rows share one look (`.acct-row`), and its
 own figures sit under its heading.
 
 #### Credit cards
@@ -185,6 +185,20 @@ guesses at a market.
 - The bar is that year's balance against the furthest year's, so the rows read
   as one curve.
 - The table is hidden when there is nothing to project.
+
+#### Life insurance
+
+A policy is a kind, who is insured, the death benefit, the premium (monthly or
+yearly), when term cover ends, and the cash value a permanent policy has built
+up. The kinds are `LIFE_INSURANCE_KINDS` in `categories.js`.
+
+- Largest death benefit first. A policy whose term has ended goes last.
+- No term end means it runs for life. The last day of a term still counts.
+- A term ending within a year is amber: new cover needs underwriting, and a
+  term policy can only be converted before it ends. Once ended it is red.
+- The figures under the heading count only policies still in force: the
+  coverage, the premiums a month (yearly ones at a twelfth) and the cash value.
+- A policy with no cash value shows none; one typed as 0 shows $0.00.
 
 #### Debt tracker
 

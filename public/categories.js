@@ -57,6 +57,10 @@ const INVESTMENT_KINDS = ['Brokerage', 'Savings', 'CD', 'Crypto', 'Real estate',
 
 const RETIREMENT_KINDS = ['401(k)', 'Roth IRA', 'Traditional IRA', '403(b)', 'SEP IRA', 'Pension', 'Other'];
 
+// Term cover stops on a date; whole and universal policies run for life and
+// can build up a cash value. Group is cover through an employer.
+const LIFE_INSURANCE_KINDS = ['Term', 'Whole', 'Universal', 'Group', 'Other'];
+
 function goalPeriod(category) {
     return YEARLY_CATEGORIES.includes(category) ? 'yearly' : 'monthly';
 }
@@ -70,5 +74,5 @@ function fillCategorySelect(select, categories, placeholder) {
 }
 
 if (typeof module !== 'undefined') {
-    module.exports = { CATEGORIES, INCOME_CATEGORIES, YEARLY_CATEGORIES, HEBREW_YEAR_CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, goalPeriod };
+    module.exports = { CATEGORIES, INCOME_CATEGORIES, YEARLY_CATEGORIES, HEBREW_YEAR_CATEGORIES, INVESTMENT_KINDS, RETIREMENT_KINDS, LIFE_INSURANCE_KINDS, goalPeriod };
 }

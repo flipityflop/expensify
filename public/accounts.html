@@ -99,6 +99,15 @@
             .projection-table { min-width: 0; }
         }
 
+        /* ----- Life insurance ----- */
+
+        /* Cover that has stopped: red, as a goal past its date on the goals
+           page. */
+        .term-ended {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
         /* ----- Debt tracker ----- */
 
         .debt-row-head { margin-bottom: 10px; }
@@ -172,6 +181,13 @@
                 </table>
             </div>
         </div>
+
+        <div class="section-head">
+            <h2 class="section-title">Life insurance</h2>
+            <button type="button" id="add-policy-btn" class="small-btn">Add policy</button>
+        </div>
+        <p class="acct-figures" id="policy-figures"></p>
+        <div id="policy-list"></div>
 
         <div class="section-head">
             <h2 class="section-title">Debt tracker</h2>
@@ -308,6 +324,61 @@
             </div>
         </div>
 
+        <div id="policy-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="policy-modal-title">Add policy</h3>
+                    <span class="close" data-close="policy-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="policy-name">Name</label>
+                        <input type="text" id="policy-name">
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-kind">Kind</label>
+                        <select id="policy-kind"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-insured">Insured</label>
+                        <input type="text" id="policy-insured">
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-benefit">Death benefit</label>
+                        <input type="number" id="policy-benefit" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-premium">Premium</label>
+                        <input type="number" id="policy-premium" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-frequency">Paid</label>
+                        <select id="policy-frequency">
+                            <option value="monthly">Every month</option>
+                            <option value="yearly">Once a year</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-term-end">Term ends</label>
+                        <input type="date" id="policy-term-end">
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-cash">Cash value</label>
+                        <input type="number" id="policy-cash" step="0.01" min="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="policy-notes">Notes</label>
+                        <input type="text" id="policy-notes">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="policy-delete" class="cancel-btn danger-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="policy-modal">Cancel</button>
+                        <button type="button" id="policy-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="payoff-modal" class="modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
@@ -382,6 +453,7 @@
     <script src="cards.js"></script>
     <script src="investments.js"></script>
     <script src="retirement.js"></script>
+    <script src="life-insurance.js"></script>
     <script src="debts.js"></script>
 </body>
 </html>
