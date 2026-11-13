@@ -149,6 +149,30 @@ const initPromise = (async () => {
         notes TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    // Cash flow on the budget page: money that comes in or goes out on a
+    // schedule. `days` holds the days of the month (1-31) for a monthly item
+    // and the weekdays (0 = Sunday) for a weekly one, comma-separated;
+    // `start_date` is a date an every-two-weeks item falls on.
+    await db.execute(`CREATE TABLE IF NOT EXISTS cash_flow_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        direction TEXT NOT NULL DEFAULT 'out',
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        days TEXT,
+        start_date TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // The cash on hand the cash flow starts from: one row, with the local date
+    // it was counted on.
+    await db.execute(`CREATE TABLE IF NOT EXISTS cash_balance (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        amount REAL NOT NULL,
+        as_of TEXT NOT NULL,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
 })();
 
 // Convert libsql Row objects to plain JS objects for JSON serialization
@@ -844,6 +868,117 @@ app.delete('/api/savings-goals/:id', requireAuth, async (req, res) => {
         const result = await db.execute({ sql: 'DELETE FROM savings_goals WHERE id = ?', args: [req.params.id] });
         if (!result.rowsAffected) return res.status(404).json({ error: 'Goal not found' });
         res.json({ message: 'Goal deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Cash flow
+//
+// Shared validation for the create and update routes, as with debts. The day
+// list is stored sorted and de-duplicated, so the page can trust it.
+const CASH_FREQUENCIES = ['monthly', 'weekly', 'biweekly'];
+
+function cashFlowFields({ name, amount, direction, frequency, days, start_date }) {
+    const cleanName = (name || '').trim();
+    if (!cleanName) return { error: 'name is required' };
+    if (isBlank(amount) || isNaN(Number(amount)) || Number(amount) <= 0) {
+        return { error: 'amount must be a positive number' };
+    }
+    if (!['in', 'out'].includes(direction)) return { error: "direction must be 'in' or 'out'" };
+    if (!CASH_FREQUENCIES.includes(frequency)) return { error: `frequency must be one of ${CASH_FREQUENCIES.join(', ')}` };
+
+    if (frequency === 'biweekly') {
+        if (!isDate(start_date)) return { error: 'start_date must be a YYYY-MM-DD date' };
+        return { args: [cleanName, Number(amount), direction, frequency, null, start_date] };
+    }
+
+    const [low, high] = frequency === 'monthly' ? [1, 31] : [0, 6];
+    const list = (Array.isArray(days) ? days : String(days || '').split(','))
+        .map(d => String(d).trim()).filter(Boolean).map(Number);
+    if (!list.length || !list.every(d => Number.isInteger(d) && d >= low && d <= high)) {
+        return { error: frequency === 'monthly' ? 'days must be days of the month, 1-31' : 'days must be weekdays, 0-6' };
+    }
+    const clean = [...new Set(list)].sort((a, b) => a - b).join(',');
+    return { args: [cleanName, Number(amount), direction, frequency, clean, null] };
+}
+
+app.get('/api/cash-flow', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT * FROM cash_flow_items ORDER BY direction, name');
+        res.json(toRows(result));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/cash-flow', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = cashFlowFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'INSERT INTO cash_flow_items (name, amount, direction, frequency, days, start_date, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            args: [...args, new Date().toISOString()]
+        });
+        res.json({ id: Number(result.lastInsertRowid), message: 'Cash flow item added' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/cash-flow/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    const { error, args } = cashFlowFields(req.body);
+    if (error) return res.status(400).json({ error });
+    try {
+        const result = await db.execute({
+            sql: 'UPDATE cash_flow_items SET name = ?, amount = ?, direction = ?, frequency = ?, days = ?, start_date = ?, updated_at = ? WHERE id = ?',
+            args: [...args, new Date().toISOString(), req.params.id]
+        });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Cash flow item not found' });
+        res.json({ message: 'Cash flow item saved' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/cash-flow/:id', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute({ sql: 'DELETE FROM cash_flow_items WHERE id = ?', args: [req.params.id] });
+        if (!result.rowsAffected) return res.status(404).json({ error: 'Cash flow item not found' });
+        res.json({ message: 'Cash flow item deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// The cash on hand, or null before it has been typed. `as_of` comes from the
+// page, the browser's local date, rather than the server's UTC clock.
+app.get('/api/cash-balance', requireAuth, async (req, res) => {
+    await initPromise;
+    try {
+        const result = await db.execute('SELECT amount, as_of FROM cash_balance WHERE id = 1');
+        res.json(toRows(result)[0] || null);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/cash-balance', requireAuth, async (req, res) => {
+    await initPromise;
+    const { amount, as_of } = req.body;
+    if (isBlank(amount) || isNaN(Number(amount))) return res.status(400).json({ error: 'amount must be a number' });
+    if (!isDate(as_of)) return res.status(400).json({ error: 'as_of must be a YYYY-MM-DD date' });
+    try {
+        await db.execute({
+            sql: `INSERT INTO cash_balance (id, amount, as_of, updated_at) VALUES (1, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET amount = excluded.amount, as_of = excluded.as_of, updated_at = excluded.updated_at`,
+            args: [Number(amount), as_of, new Date().toISOString()]
+        });
+        res.json({ message: 'Cash on hand saved' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

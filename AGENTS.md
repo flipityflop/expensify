@@ -115,6 +115,27 @@ ones with no date go last.
 - A due day past the end of a short month falls on that month's last day.
 - The monthly total counts yearly ones at a twelfth.
 
+**Cash flow.** Recurring money in and out, run forward from the cash on hand
+so a forgotten cash bill does not empty the wallet (`cash-flow.js`, tables
+`cash_flow_items` and `cash_balance`). Separate from the plan and the budgets:
+it is about when the cash moves, not what it is spent on.
+
+- An item is monthly on one or more days of the month, weekly on one or more
+  weekdays, or every 2 weeks from a date it falls on. A day past the end of a
+  short month falls on the last day; two days landing on one date are two
+  payments.
+- **Per month**: monthly × its days; weekly × its days × 52/12; every 2 weeks
+  × 26/12.
+- Typing the cash on hand dates it today. That amount already counts the
+  day's items, so items start the day after.
+- **Cash now** = cash on hand plus the items between its date and yesterday.
+  Items from today on are listed under **Coming up**, through the end of next
+  month, each with the cash after it.
+- On one day, money out goes before money in, so the low point is never
+  flattered by the order.
+- **Lowest** is the least the cash gets to from now to the end of next month:
+  what could be spent without running out. Red below 0.
+
 **Yearly goals.** Still typed by hand: maaser is a rule, not an average.
 
 - Tzedakah runs on the Jewish year, 1 Tishrei to 29 Elul. The calculation is

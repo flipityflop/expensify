@@ -179,6 +179,65 @@
 
         .due-inputs #fixed-due-day { max-width: 90px; }
 
+        /* ----- Cash flow ----- */
+
+        .cash-balance-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .cash-balance-row label { font-weight: 600; }
+
+        #cash-as-of {
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+
+        /* Three tiles across even on a phone, where style.css would otherwise
+           stack .summary into a column. */
+        #cash-totals {
+            flex-direction: row;
+            gap: 10px;
+        }
+
+        #cash-totals .summary-item {
+            min-width: 0;
+            padding: 12px;
+        }
+
+        #cash-totals .summary-label { font-size: 0.8rem; }
+        #cash-totals .summary-value { font-size: 1.1rem; }
+
+        .cash-subtitle {
+            margin: 18px 0 8px;
+            color: #a8b3cf;
+            font-size: 1rem;
+        }
+
+        .weekday-boxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 14px;
+        }
+
+        .modal-field .weekday-boxes label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin: 0;
+        }
+
+        .modal-field .weekday-boxes input {
+            width: auto;
+            accent-color: #67e8f9;
+        }
+
+        @media (max-width: 768px) {
+            .cash-table { min-width: 0; }
+        }
+
     </style>
 </head>
 <body>
@@ -298,6 +357,97 @@
             </table>
         </div>
 
+        <div class="section-head">
+            <h2 class="section-title">Cash flow</h2>
+            <button type="button" id="add-cash-btn" class="small-btn">Add cash item</button>
+        </div>
+        <div class="cash-balance-row">
+            <label for="cash-balance">Cash on hand</label>
+            <input type="number" id="cash-balance" class="goal-input" step="0.01">
+            <span id="cash-as-of"></span>
+        </div>
+        <div id="cash-totals" class="summary"></div>
+        <div class="table-container">
+            <table class="cash-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>When</th>
+                        <th>Amount</th>
+                        <th>Per month</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="cash-items-tbody"></tbody>
+                <tfoot id="cash-items-tfoot"></tfoot>
+            </table>
+        </div>
+        <h3 class="cash-subtitle">Coming up</h3>
+        <div class="table-container">
+            <table class="cash-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Item</th>
+                        <th>Amount</th>
+                        <th>Cash after</th>
+                    </tr>
+                </thead>
+                <tbody id="cash-upcoming-tbody"></tbody>
+            </table>
+        </div>
+
+        <div id="cash-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="cash-modal-title">Add cash item</h3>
+                    <span class="close" data-close="cash-modal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-field">
+                        <label for="cash-name">Name</label>
+                        <input type="text" id="cash-name">
+                    </div>
+                    <div class="modal-field">
+                        <label for="cash-direction">Type</label>
+                        <select id="cash-direction">
+                            <option value="out">Money out</option>
+                            <option value="in">Money in</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label for="cash-amount">Amount each time</label>
+                        <input type="number" id="cash-amount" step="0.01" min="0">
+                    </div>
+                    <div class="modal-field">
+                        <label for="cash-frequency">How often</label>
+                        <select id="cash-frequency">
+                            <option value="monthly">Monthly</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="biweekly">Every 2 weeks</option>
+                        </select>
+                    </div>
+                    <div class="modal-field" id="cash-month-days-field">
+                        <label for="cash-month-days">Days of the month</label>
+                        <input type="text" id="cash-month-days" inputmode="numeric">
+                    </div>
+                    <div class="modal-field" id="cash-weekdays-field">
+                        <label>Days</label>
+                        <div class="weekday-boxes" id="cash-weekdays"></div>
+                    </div>
+                    <div class="modal-field" id="cash-start-field">
+                        <label for="cash-start">Next date</label>
+                        <input type="date" id="cash-start">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" id="cash-delete" class="cancel-btn danger-btn">Delete</button>
+                        <button type="button" class="cancel-btn" data-close="cash-modal">Cancel</button>
+                        <button type="button" id="cash-save" class="confirm-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="fixed-modal" class="modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
@@ -351,5 +501,6 @@
     <script src="helpers.js"></script>
     <script src="budget.js"></script>
     <script src="fixed-expenses.js"></script>
+    <script src="cash-flow.js"></script>
 </body>
 </html>

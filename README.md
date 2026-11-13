@@ -131,6 +131,24 @@ CREATE TABLE savings_goals (
     notes TEXT,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE cash_flow_items (                 -- the budget page's cash flow
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    amount REAL NOT NULL,                      -- each time it comes round
+    direction TEXT NOT NULL DEFAULT 'out',     -- 'in' | 'out'
+    frequency TEXT NOT NULL DEFAULT 'monthly', -- 'monthly' | 'weekly' | 'biweekly'
+    days TEXT,                                 -- monthly: days 1-31; weekly: weekdays 0-6 (0 = Sunday); comma-separated
+    start_date TEXT,                           -- biweekly: a YYYY-MM-DD it falls on
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cash_balance (                    -- one row: the cash on hand
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    amount REAL NOT NULL,
+    as_of TEXT NOT NULL,                       -- YYYY-MM-DD, the browser's local date
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 The monthly amount a goal needs is worked out on the Goals page, not stored, so
@@ -191,6 +209,12 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `PUT` | `/api/savings-goals/:id` | Replace a goal's name, target, date, saved amount and notes |
 | `POST` | `/api/savings-goals/:id/save` | Add to what is put by |
 | `DELETE` | `/api/savings-goals/:id` | Delete by id |
+| `GET` | `/api/cash-flow` | All cash flow items |
+| `POST` | `/api/cash-flow` | Add one |
+| `PUT` | `/api/cash-flow/:id` | Replace its name, amount, direction, frequency, days and start date |
+| `DELETE` | `/api/cash-flow/:id` | Delete by id |
+| `GET` | `/api/cash-balance` | The cash on hand and its date, or `null` |
+| `PUT` | `/api/cash-balance` | Set the cash on hand and its date |
 
 `/cards.html` redirects to `/accounts.html`, for shortcuts saved before the
 page was renamed.
@@ -242,11 +266,12 @@ expensify-site/
 │   ├── test-fixed-expenses.js
 │   ├── test-accounts.js
 │   ├── test-debt.js
-│   └── test-goals.js
+│   ├── test-goals.js
+│   └── test-cash-flow.js
 └── public/                # Served by Express static middleware
     ├── index.html         # Main entry form
     ├── login.html
-    ├── budget.html        # Goals vs actual, per month
+    ├── budget.html        # Goals vs actual, per month, and the cash flow
     ├── all-expenses.html  # Filter / chart / export view
     ├── accounts.html      # Cards, investments, retirement + debt tracker
     ├── goals.html         # Savings goals and the monthly amount each needs
@@ -262,6 +287,7 @@ expensify-site/
     ├── debts.js           # Debt tracker section of the accounts page
     ├── goals.js
     ├── fixed-expenses.js  # Fixed expenses: the modal, opened rows, due-date schedule
+    ├── cash-flow.js       # Cash flow section of the budget page
     ├── all-expenses.js
     └── style.css
 ```
@@ -280,9 +306,10 @@ node scripts/test-fixed-expenses.js     # next due dates, opened rows, schedule
 node scripts/test-accounts.js           # card interest, fee renewal, order, totals, projection
 node scripts/test-debt.js               # debt remaining + bar arithmetic
 node scripts/test-goals.js              # months left, the monthly amount needed, the bar
+node scripts/test-cash-flow.js          # cash flow dates, per month, cash now and the low point
 ```
 
-`npm test` runs all eight. The first needs `TURSO_*` set; the others do not
+`npm test` runs all nine. The first needs `TURSO_*` set; the others do not
 touch the database.
 
 ## Deployment
