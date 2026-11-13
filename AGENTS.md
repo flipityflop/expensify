@@ -117,8 +117,13 @@ ones with no date go last.
 
 **Cash flow.** Recurring money in and out, run forward from the cash on hand
 so a forgotten cash bill does not empty the wallet (`cash-flow.js`, tables
-`cash_flow_items` and `cash_balance`). Separate from the plan and the budgets:
-it is about when the cash moves, not what it is spent on.
+`cash_flow_items` and `cash_balance`).
+
+- It is deliberately unconnected to the plan, the budgets, fixed expenses and
+  due dates, which are general spending by cash or card. The owner wants it
+  kept apart: do not feed it from them or them from it.
+- Paying off a credit card is an ordinary money-out item here. The purchases
+  on the card are already counted as spending in the budget.
 
 - An item is monthly on one or more days of the month, weekly on one or more
   weekdays, or every 2 weeks from a date it falls on. A day past the end of a
