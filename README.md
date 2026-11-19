@@ -182,6 +182,7 @@ All require `Authorization: Bearer <APP_PASSWORD>` except `/api/login`.
 | `PUT` | `/api/budget-goals` | Upsert one goal by category (yearly goals and the plan rows) |
 | `GET` | `/api/budget-targets` | All monthly targets |
 | `PUT` | `/api/budget-targets` | Upsert one target by category and month |
+| `POST` | `/api/budget-targets/import` | Upsert many targets at once (`{ targets: [{ category, month, amount }] }`), all or nothing |
 | `DELETE` | `/api/budget-targets?category=&month=` | Clear a target |
 | `GET` | `/api/debts` | All debts, oldest first |
 | `POST` | `/api/debts` | Add a debt |

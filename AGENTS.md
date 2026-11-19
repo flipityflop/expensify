@@ -97,6 +97,20 @@ budget.
 - Yearly goals are **not** taken off the income before fitting. The owner
   reverted that (35a291e). Ask before bringing it back.
 
+**Importing targets.** Import targets on the Monthly budget heading reads a
+CSV of `month,category,amount` and sets each row's Target (`budget-import.js`,
+route `POST /api/budget-targets/import`, all or nothing).
+
+- Columns are found by header name. A blank month means the selected month;
+  with no month column every row is for it. A blank amount leaves the category
+  alone.
+- A target is never set below the category's fixed expenses: it is raised to
+  them, and the confirm says how many were. Fixed expenses themselves are not
+  changed. Typing a target by hand still allows going below.
+- Yearly and unknown categories are skipped and listed in the confirm.
+- Sample file downloads every monthly category with its budget for the
+  selected month, so it imports back unchanged.
+
 **Fixed expenses inside a category.** Click the category name (▸) to open its
 row. The `N fixed` badge counts what is inside.
 

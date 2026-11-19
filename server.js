@@ -376,6 +376,36 @@ app.put('/api/budget-targets', requireAuth, async (req, res) => {
     }
 });
 
+// Many targets at once, from the budget page's CSV import. All or nothing: one
+// bad row rejects the lot, so a half-applied file never shows as a budget.
+app.post('/api/budget-targets/import', requireAuth, async (req, res) => {
+    await initPromise;
+    const list = req.body && req.body.targets;
+    if (!Array.isArray(list) || !list.length) return res.status(400).json({ error: 'targets must be a non-empty list' });
+    if (list.length > 1000) return res.status(400).json({ error: 'at most 1000 targets at once' });
+    const now = new Date().toISOString();
+    const statements = [];
+    for (const [i, t] of list.entries()) {
+        const { error, args } = targetKey(t || {});
+        if (error) return res.status(400).json({ error: `row ${i + 1}: ${error}` });
+        if (isBlank(t.amount) || !(Number(t.amount) >= 0)) return res.status(400).json({ error: `row ${i + 1}: amount must be 0 or more` });
+        statements.push({
+            sql: `INSERT INTO budget_targets (category, month, amount, updated_at)
+                  VALUES (?, ?, ?, ?)
+                  ON CONFLICT(category, month) DO UPDATE SET
+                      amount = excluded.amount,
+                      updated_at = excluded.updated_at`,
+            args: [...args, Number(t.amount), now]
+        });
+    }
+    try {
+        await db.batch(statements, 'write');
+        res.json({ message: `${statements.length} targets saved` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Clearing a target that is not there is not an error: either way there is
 // none afterwards.
 app.delete('/api/budget-targets', requireAuth, async (req, res) => {

@@ -300,7 +300,14 @@
         </div>
         <p class="plan-breakdown" id="plan-breakdown"></p>
 
-        <h2 class="section-title" id="monthly-heading">Monthly budget</h2>
+        <div class="section-head">
+            <h2 class="section-title" id="monthly-heading">Monthly budget</h2>
+            <div>
+                <button type="button" id="sample-targets-btn" class="small-btn">Sample file</button>
+                <button type="button" id="import-targets-btn" class="small-btn">Import targets</button>
+                <input type="file" id="import-targets-input" accept=".csv,text/csv" hidden>
+            </div>
+        </div>
         <div class="table-container">
             <table>
                 <thead>
@@ -500,6 +507,7 @@
     <script src="auth.js"></script>
     <script src="helpers.js"></script>
     <script src="budget.js"></script>
+    <script src="budget-import.js"></script>
     <script src="fixed-expenses.js"></script>
     <script src="cash-flow.js"></script>
 </body>
