@@ -91,16 +91,16 @@ async function handleTargetsFile(e) {
 
     const { rows, errors } = parseTargetsCsv(await file.text(), monthInput.value);
     if (!rows.length) {
-        alert(errors.length ? errors.join('\n') : 'No targets in the file.');
+        alert(errors[0] || 'No targets in the file.');
         return;
     }
     const lifted = coverFixedExpenses(rows);
 
+    // One line: how many, and what was changed or left out.
     const months = [...new Set(rows.map(r => r.month))].sort();
-    const lines = [`Set ${rows.length} target${rows.length === 1 ? '' : 's'} for ${months.join(', ')}?`];
-    if (lifted) lines.push(`${lifted} raised to cover fixed expenses.`);
-    if (errors.length) lines.push(`${errors.length} skipped:`, ...errors);
-    if (!confirm(lines.join('\n'))) return;
+    const notes = [lifted && `${lifted} raised to fixed`, errors.length && `${errors.length} skipped`].filter(Boolean);
+    const question = `Set ${rows.length} target${rows.length === 1 ? '' : 's'} for ${months.join(', ')}?`;
+    if (!confirm(notes.length ? `${question} (${notes.join(', ')})` : question)) return;
 
     try {
         const response = await fetch('/api/budget-targets/import', {

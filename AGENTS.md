@@ -105,9 +105,11 @@ route `POST /api/budget-targets/import`, all or nothing).
   with no month column every row is for it. A blank amount leaves the category
   alone.
 - A target is never set below the category's fixed expenses: it is raised to
-  them, and the confirm says how many were. Fixed expenses themselves are not
-  changed. Typing a target by hand still allows going below.
-- Yearly and unknown categories are skipped and listed in the confirm.
+  them. Fixed expenses themselves are not changed. Typing a target by hand
+  still allows going below.
+- Yearly and unknown categories, and bad amounts or months, are skipped.
+- The confirm is one line: `Set 2 targets for 2026-11? (1 raised to fixed,
+  1 skipped)`. A file with nothing usable alerts its first problem.
 - Sample file downloads every monthly category with its budget for the
   selected month, so it imports back unchanged.
 
