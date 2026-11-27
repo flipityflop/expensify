@@ -374,6 +374,24 @@ header.flex h1 {
     box-shadow: 0 6px 16px rgba(79, 195, 247, 0.4);
 }
 
+/* Home page: the submit button sticks to the bottom of the screen while the
+   form is in view, so it can be pressed without scrolling. On Android the
+   viewport meta's interactive-widget makes the keyboard shrink the page, so
+   bottom: 0 sits above it. iOS does not shrink the page, so script.js sets
+   --keyboard-inset to the keyboard's height. */
+.expense-form .submit-btn {
+    position: sticky;
+    bottom: calc(12px + var(--keyboard-inset, 0px) + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+}
+
+/* Keep a focused field clear of the sticky button when the browser scrolls
+   it into view. */
+.expense-form input,
+.expense-form select {
+    scroll-margin-bottom: 90px;
+}
+
 /* Message styles */
 .message {
     padding: 12px 20px;

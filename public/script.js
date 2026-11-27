@@ -21,6 +21,21 @@ const eventSuggestions = document.getElementById('event-suggestions');
 
 // getAuthToken / getAuthHeaders / checkAuth / logout come from auth.js
 
+// iOS keeps the page full height when the keyboard opens, so the sticky
+// Add Expense button would sit behind it. Lift it by the part of the page the
+// keyboard covers. Elsewhere this works out to 0.
+(function trackKeyboardInset() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+        const covered = window.innerHeight - (vv.height + vv.offsetTop);
+        document.documentElement.style.setProperty('--keyboard-inset', Math.max(0, Math.round(covered)) + 'px');
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    update();
+})();
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
